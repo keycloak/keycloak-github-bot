@@ -1,0 +1,30 @@
+### Before reporting an issue
+
+- [X] I have searched existing issues
+- [X] I have reproduced the issue with the latest release
+
+### Area
+
+adapter/java-cli
+
+### Describe the bug
+
+Blah blah blah
+
+### Version
+
+20.0.2
+
+### Expected behavior
+
+It works
+
+### Actual behavior
+
+It doesn't work
+
+### How to Reproduce?
+
+Do stuff
+
+### Anything else?
