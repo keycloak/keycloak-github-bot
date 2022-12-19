@@ -36,6 +36,11 @@
             <artifactId>quarkus-github-app</artifactId>
             <version>1.14.0</version>
         </dependency>
+<!--        <dependency>-->
+<!--            <groupId>io.quarkiverse.githubapp</groupId>-->
+<!--            <artifactId>quarkus-github-app-command-airline</artifactId>-->
+<!--            <version>1.15.1</version>-->
+<!--        </dependency>-->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-openshift</artifactId>
@@ -43,6 +48,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.11.0</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

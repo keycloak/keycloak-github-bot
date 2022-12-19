@@ -17,18 +17,21 @@ public class Labels {
 
     public static final String STATUS_TRIAGE = "status/triage";
 
+    public static final String AREA_CI = "area/ci";
+
+    public static final String FLAKY_TEST = "flaky-test";
+
     public static boolean hasLabel(GHIssue issue, String label) {
         return issue.getLabels().stream().filter(l -> l.getName().equals(label)).findFirst().isPresent();
     }
 
-    public static void addArea(GHIssue issue, String area) throws IOException {
-        String areaLabel = "area/" + area;
+    public static void addArea(GHIssue issue, String areaLabel) throws IOException {
         if (!hasLabel(issue, areaLabel)) {
             if (hasLabel(issue.getRepository(), areaLabel)) {
                 issue.addLabels(areaLabel);
-                logger.infov("Added label " + area + " to issue '" + issue.getTitle() + "' #" + issue.getNumber());
+                logger.infov("Added label " + areaLabel + " to issue '" + issue.getTitle() + "' #" + issue.getNumber());
             } else {
-                logger.errorv("Label " + area + " not found for issue '" + issue.getTitle() + "' #" + issue.getNumber());
+                logger.errorv("Label " + areaLabel + " not found for issue '" + issue.getTitle() + "' #" + issue.getNumber());
             }
         }
     }
