@@ -1,7 +1,5 @@
 package org.keycloak.gh.bot.cli;
 
-import com.github.rvesse.airline.annotations.Cli;
-import com.github.rvesse.airline.annotations.Command;
 import org.kohsuke.github.GHCheckRun;
 import org.kohsuke.github.GHCommentAuthorAssociation;
 import org.kohsuke.github.GHEvent;
@@ -10,7 +8,6 @@ import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHIssueComment;
 import org.kohsuke.github.GHPullRequest;
 import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GHWorkflowJob;
 import org.kohsuke.github.GHWorkflowRun;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.ReactionContent;
