@@ -1,6 +1,8 @@
 # Keycloak GitHub Bot
 
-GitHub Application to help manage issues and PRs for the Keycloak project.
+GitHub Application to help manage issues and PRs for the Keycloak project. 
+
+The bot is currently deployed to https://openshift-console.osci.io/.
 
 ## What the application does
 
