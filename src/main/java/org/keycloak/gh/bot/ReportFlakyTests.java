@@ -37,29 +37,25 @@ public class ReportFlakyTests {
                     for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
                         GHIssue issue = findIssue(gitHub, flakyTest);
                         GHPullRequest pullRequest = findPullRequest(workflowRun);
-                        boolean issueExists = issue != null;
 
-                        if (issueExists) {
+                        if (issue != null) {
                             String body = getBody(flakyTest, workflowRun, pullRequest);
                             issue.comment(body);
 
                             logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
                             flaky = true;
                         } else {
-                            issue = createIssue(flakyTest, workflowRun, pullRequest);
+                            if (pullRequest == null) {
+                                issue = createIssue(flakyTest, workflowRun, null);
 
-                            logger.infov("Flakes found in {0}, created issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
-                            flaky = true;
-                        }
-
-                        if (pullRequest != null) {
-                            pullRequest.addLabels(Labels.FLAKY_TEST);
-
-                            if (!issueExists) {
+                                logger.infov("Flakes found in {0}, created issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
+                                flaky = true;
+                            } else {
+                                String body = getBody(flakyTest, workflowRun, pullRequest);
                                 pullRequest
                                         .createReview()
                                         .event(GHPullRequestReviewEvent.REQUEST_CHANGES)
-                                        .body("Flaky tests not previously reported detected, please review " + issue.getHtmlUrl().toString())
+                                        .body(body)
                                         .create();
                             }
                         }
