@@ -40,7 +40,7 @@ public class ReportFlakyTestsTest {
         when(workflowRun.getHtmlUrl()).thenReturn(new URL("https://workflow-link"));
         when(workflowRun.getEvent()).thenReturn(GHEvent.SCHEDULE);
 
-        assertEquals(expectedBody, reportFlakyTests.getBody(flakyTest, workflowRun));
+        assertEquals(expectedBody, reportFlakyTests.getBody(flakyTest, workflowRun, null));
     }
 
     @Test
@@ -54,17 +54,14 @@ public class ReportFlakyTestsTest {
         String expectedBody = new String(ReportFlakyTestsTest.class.getResourceAsStream("flaky-test-body-pull_request").readAllBytes(), StandardCharsets.UTF_8);
 
         GHWorkflowRun workflowRun = mock(GHWorkflowRun.class);
-        GHPullRequest pullRequest = mock(GHPullRequest.class);
-        when(pullRequest.getHtmlUrl()).thenReturn(new URL("https://pull-request-link/123"));
-
-        List<GHPullRequest> pullRequests = new LinkedList<>();
-        pullRequests.add(pullRequest);
 
         when(workflowRun.getHtmlUrl()).thenReturn(new URL("https://workflow-link"));
         when(workflowRun.getEvent()).thenReturn(GHEvent.PULL_REQUEST);
-        when(workflowRun.getPullRequests()).thenReturn(pullRequests);
 
-        assertEquals(expectedBody, reportFlakyTests.getBody(flakyTest, workflowRun));
+        GHPullRequest pullRequest = mock(GHPullRequest.class);
+        when(pullRequest.getHtmlUrl()).thenReturn(new URL("https://pull-request-link/123"));
+
+        assertEquals(expectedBody, reportFlakyTests.getBody(flakyTest, workflowRun, pullRequest));
     }
 
 }

@@ -8,6 +8,7 @@ import org.kohsuke.github.GHArtifact;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHPullRequestReviewEvent;
 import org.kohsuke.github.GHWorkflow;
 import org.kohsuke.github.GHWorkflowRun;
 import org.kohsuke.github.GitHub;
@@ -35,17 +36,32 @@ public class ReportFlakyTests {
 
                     for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
                         GHIssue issue = findIssue(gitHub, flakyTest);
-                        if (issue != null) {
-                            String body = getBody(flakyTest, workflowRun);
+                        GHPullRequest pullRequest = findPullRequest(workflowRun);
+                        boolean issueExists = issue != null;
+
+                        if (issueExists) {
+                            String body = getBody(flakyTest, workflowRun, pullRequest);
                             issue.comment(body);
 
                             logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
                             flaky = true;
                         } else {
-                            issue = createIssue(flakyTest, workflowRun);
+                            issue = createIssue(flakyTest, workflowRun, pullRequest);
 
                             logger.infov("Flakes found in {0}, created issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
                             flaky = true;
+                        }
+
+                        if (pullRequest != null) {
+                            pullRequest.addLabels(Labels.FLAKY_TEST);
+
+                            if (!issueExists) {
+                                pullRequest
+                                        .createReview()
+                                        .event(GHPullRequestReviewEvent.REQUEST_CHANGES)
+                                        .body("Flaky tests not previously reported detected, please review " + issue.getHtmlUrl().toString())
+                                        .create();
+                            }
                         }
                     }
                 }
@@ -64,9 +80,17 @@ public class ReportFlakyTests {
         return !issues.isEmpty() ? issues.get(0) : null;
     }
 
-    public GHIssue createIssue(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun) throws IOException {
+    public GHPullRequest findPullRequest(GHWorkflowRun workflowRun) throws IOException {
+        if (!workflowRun.getPullRequests().isEmpty()) {
+            return workflowRun.getPullRequests().get(0);
+        } else {
+            return null;
+        }
+    }
+
+    public GHIssue createIssue(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
         String title = getTitle(flakyTest);
-        String body = getBody(flakyTest, workflowRun);
+        String body = getBody(flakyTest, workflowRun, pullRequest);
         GHIssue issue = workflowRun.getRepository()
                 .createIssue(title)
                 .body(body)
@@ -81,7 +105,7 @@ public class ReportFlakyTests {
         return "Flaky test: " + flakyTest.getClassName() + "#" + flakyTest.getMethodName();
     }
 
-    public String getBody(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun) throws IOException {
+    public String getBody(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
         StringBuilder body = new StringBuilder();
 
         body.append("## ");
@@ -96,9 +120,7 @@ public class ReportFlakyTests {
         body.append(workflowRun.getHtmlUrl().toString());
         body.append(")");
 
-        if (!workflowRun.getPullRequests().isEmpty()) {
-            GHPullRequest pullRequest = workflowRun.getPullRequests().get(0);
-
+        if (pullRequest != null) {
             String pullRequestUrl = pullRequest.getHtmlUrl().toString();
             String pullRequestNumber = pullRequestUrl.substring(pullRequestUrl.lastIndexOf('/') + 1);
 
