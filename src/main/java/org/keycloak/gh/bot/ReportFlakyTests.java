@@ -7,6 +7,8 @@ import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHArtifact;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHWorkflow;
 import org.kohsuke.github.GHWorkflowRun;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.PagedIterator;
@@ -18,10 +20,14 @@ public class ReportFlakyTests {
 
     Logger logger = Logger.getLogger(ReportFlakyTests.class);
 
-    void onCompleted(@WorkflowRun.Completed GHEventPayload.WorkflowRun workflowRun, GitHub gitHub) throws IOException {
-        if(workflowRun.getWorkflow().getName().equals("Keycloak CI")) {
+    void onCompleted(@WorkflowRun.Completed GHEventPayload.WorkflowRun workflowRunEvent, GitHub gitHub) throws IOException {
+        GHWorkflow workflow = workflowRunEvent.getWorkflow();
+        GHWorkflowRun workflowRun = workflowRunEvent.getWorkflowRun();
+
+        if(workflow.getName().equals("Keycloak CI")) {
             boolean flaky = false;
-            PagedIterator<GHArtifact> iterator = workflowRun.getWorkflowRun().listArtifacts().iterator();
+
+            PagedIterator<GHArtifact> iterator = workflowRun.listArtifacts().iterator();
             while (iterator.hasNext()) {
                 GHArtifact ghArtifact = iterator.next();
                 if (ghArtifact.getName().startsWith("flaky-tests-")) {
@@ -30,25 +36,25 @@ public class ReportFlakyTests {
                     for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
                         GHIssue issue = findIssue(gitHub, flakyTest);
                         if (issue != null) {
-                            String body = getBody(flakyTest, workflowRun.getWorkflowRun().getHtmlUrl().toString());
+                            String body = getBody(flakyTest, workflowRun);
                             issue.comment(body);
 
-                            logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getWorkflowRun().getHtmlUrl(), issue.getHtmlUrl());
+                            logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
                             flaky = true;
                         } else {
-                            issue = createIssue(flakyTest, workflowRun.getWorkflowRun());
+                            issue = createIssue(flakyTest, workflowRun);
 
-                            logger.infov("Flakes found in {0}, created issue {1}", workflowRun.getWorkflowRun().getHtmlUrl(), issue.getHtmlUrl());
+                            logger.infov("Flakes found in {0}, created issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
                             flaky = true;
                         }
                     }
                 }
             }
             if (!flaky) {
-                logger.infov("No flakes found in {0}", workflowRun.getWorkflowRun().getHtmlUrl());
+                logger.infov("No flakes found in {0}", workflowRun.getHtmlUrl());
             }
         } else {
-            logger.infov("Skipping {0}", workflowRun.getWorkflowRun().getName());
+            logger.infov("Skipping {0}", workflowRun.getName());
         }
     }
 
@@ -60,7 +66,7 @@ public class ReportFlakyTests {
 
     public GHIssue createIssue(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun) throws IOException {
         String title = getTitle(flakyTest);
-        String body = getBody(flakyTest, workflowRun.getHtmlUrl().toString());
+        String body = getBody(flakyTest, workflowRun);
         GHIssue issue = workflowRun.getRepository()
                 .createIssue(title)
                 .body(body)
@@ -75,7 +81,7 @@ public class ReportFlakyTests {
         return "Flaky test: " + flakyTest.getClassName() + "#" + flakyTest.getMethodName();
     }
 
-    public String getBody(FlakyTestParser.FlakyTest flakyTest, String workflowRunUrl) {
+    public String getBody(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun) throws IOException {
         StringBuilder body = new StringBuilder();
 
         body.append("## ");
@@ -84,8 +90,27 @@ public class ReportFlakyTests {
         body.append(flakyTest.getMethodName());
         body.append("\n");
 
-        body.append(workflowRunUrl);
+        body.append("[Run (");
+        body.append(workflowRun.getEvent().name().toLowerCase());
+        body.append(")](");
+        body.append(workflowRun.getHtmlUrl().toString());
+        body.append(")");
+
+        if (!workflowRun.getPullRequests().isEmpty()) {
+            GHPullRequest pullRequest = workflowRun.getPullRequests().get(0);
+
+            String pullRequestUrl = pullRequest.getHtmlUrl().toString();
+            String pullRequestNumber = pullRequestUrl.substring(pullRequestUrl.lastIndexOf('/') + 1);
+
+            body.append(" / [Pull Request #");
+            body.append(pullRequestNumber);
+            body.append("](");
+            body.append(pullRequestUrl);
+            body.append(")");
+        }
+
         body.append("\n\n");
+
         body.append("### Errors\n");
 
         for (String failure : flakyTest.getFailures()) {
