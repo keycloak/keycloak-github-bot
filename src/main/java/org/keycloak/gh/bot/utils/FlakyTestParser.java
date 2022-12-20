@@ -10,6 +10,7 @@ import javax.xml.parsers.SAXParserFactory;
 import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class FlakyTestParser {
@@ -22,9 +23,11 @@ public class FlakyTestParser {
             SAXParserFactory saxParserFactory = SAXParserFactory.newInstance();
             saxParserFactory.setNamespaceAware(true);
             saxParserFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            while (zipInputStream.getNextEntry() != null) {
-                SAXParser saxParser = saxParserFactory.newSAXParser();
-                saxParser.parse(CloseShieldInputStream.wrap(zipInputStream), flakyTestHandler);
+            for (ZipEntry ze = zipInputStream.getNextEntry(); ze != null; ze = zipInputStream.getNextEntry()) {
+                if (ze.getName().startsWith("TEST-") && ze.getName().endsWith(".xml")) {
+                    SAXParser saxParser = saxParserFactory.newSAXParser();
+                    saxParser.parse(CloseShieldInputStream.wrap(zipInputStream), flakyTestHandler);
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
