@@ -5,10 +5,15 @@ import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.utils.FlakyTestParser;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHArtifact;
+import org.kohsuke.github.GHDirection;
 import org.kohsuke.github.GHEvent;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHPullRequestQueryBuilder;
+import org.kohsuke.github.GHPullRequestReview;
+import org.kohsuke.github.GHPullRequestReviewComment;
 import org.kohsuke.github.GHPullRequestReviewEvent;
 import org.kohsuke.github.GHWorkflow;
 import org.kohsuke.github.GHWorkflowRun;
@@ -51,8 +56,10 @@ public class ReportFlakyTests {
 
             if (issue != null) {
                 createIssueComment(flakyTest, workflowRun, pullRequest, issue);
-            } else if (GHEvent.PULL_REQUEST == workflowRun.getEvent() && pullRequest != null) {
-                createPullRequestReview(flakyTest, workflowRun, pullRequest);
+            } else if (GHEvent.PULL_REQUEST == workflowRun.getEvent()) {
+                if (pullRequest != null) {
+                    createPullRequestReview(flakyTest, workflowRun, pullRequest);
+                }
             } else {
                 createIssue(flakyTest, workflowRun, null);
             }
@@ -85,9 +92,16 @@ public class ReportFlakyTests {
             return null;
         }
 
+        // workflowRun.getPullRequests() is empty for pull requests from a fork, although expensive listing through all
+        // open pull requests seems to be the only way to find the pull request for the event.
+
         String headSha = workflowRun.getHeadSha();
-        String fullyQualifiedBranchName = workflowRun.getHeadRepository().getOwnerName() + ":" + workflowRun.getHeadBranch();
-        PagedIterable<GHPullRequest> pullRequestsForThisBranch = workflowRun.getRepository().queryPullRequests().head(fullyQualifiedBranchName).list();
+        PagedIterable<GHPullRequest> pullRequestsForThisBranch = workflowRun.getRepository()
+                .queryPullRequests()
+                .state(GHIssueState.OPEN)
+                .sort(GHPullRequestQueryBuilder.Sort.UPDATED)
+                .direction(GHDirection.DESC)
+                .list();
 
         for (GHPullRequest pullRequest : pullRequestsForThisBranch) {
             if (headSha.equals(pullRequest.getHead().getSha())) {
