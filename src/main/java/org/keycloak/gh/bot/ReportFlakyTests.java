@@ -39,6 +39,14 @@ public class ReportFlakyTests {
                         GHIssue issue = findIssue(gitHub, flakyTest);
                         GHPullRequest pullRequest = findPullRequest(workflowRun);
 
+                        if (GHEvent.PULL_REQUEST != workflowRun.getEvent()) {
+                            if (pullRequest != null) {
+                                logger.errorv("Pull request event, but pull request not found for {0}", workflowRun.getHtmlUrl());
+                            } else {
+                                pullRequest.addLabels(Labels.FLAKY_TEST);
+                            }
+                        }
+
                         if (issue != null) {
                             String body = getBody(flakyTest, workflowRun, pullRequest);
                             issue.comment(body);
