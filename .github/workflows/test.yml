@@ -18,4 +18,4 @@ jobs:
         distribution: temurin
         cache: maven
     - name: Test
-      run: mvn test
+      run: mvn package -Dquarkus.native.container-build=true -Dnative
