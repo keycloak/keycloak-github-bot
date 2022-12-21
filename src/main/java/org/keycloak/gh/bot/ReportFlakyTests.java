@@ -5,10 +5,15 @@ import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.utils.FlakyTestParser;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHArtifact;
+import org.kohsuke.github.GHDirection;
 import org.kohsuke.github.GHEvent;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHPullRequestQueryBuilder;
+import org.kohsuke.github.GHPullRequestReview;
+import org.kohsuke.github.GHPullRequestReviewComment;
 import org.kohsuke.github.GHPullRequestReviewEvent;
 import org.kohsuke.github.GHWorkflow;
 import org.kohsuke.github.GHWorkflowRun;
@@ -46,16 +51,22 @@ public class ReportFlakyTests {
             pullRequest.addLabels(Labels.FLAKY_TEST);
         }
 
+        List<FlakyTestParser.FlakyTest> unreportedFlakyTestsFromPr = new LinkedList<>();
+
         for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
             GHIssue issue = findIssue(gitHub, flakyTest);
 
             if (issue != null) {
                 createIssueComment(flakyTest, workflowRun, pullRequest, issue);
-            } else if (GHEvent.PULL_REQUEST == workflowRun.getEvent() && pullRequest != null) {
-                createPullRequestReview(flakyTest, workflowRun, pullRequest);
+            } else if (GHEvent.PULL_REQUEST == workflowRun.getEvent()) {
+                unreportedFlakyTestsFromPr.add(flakyTest);
             } else {
                 createIssue(flakyTest, workflowRun, null);
             }
+        }
+
+        if (!unreportedFlakyTestsFromPr.isEmpty() && pullRequest != null) {
+            createPullRequestReview(unreportedFlakyTestsFromPr, workflowRun, pullRequest);
         }
     }
 
@@ -85,9 +96,16 @@ public class ReportFlakyTests {
             return null;
         }
 
+        // workflowRun.getPullRequests() is empty for pull requests from a fork, although expensive listing through all
+        // open pull requests seems to be the only way to find the pull request for the event.
+
         String headSha = workflowRun.getHeadSha();
-        String fullyQualifiedBranchName = workflowRun.getHeadRepository().getOwnerName() + ":" + workflowRun.getHeadBranch();
-        PagedIterable<GHPullRequest> pullRequestsForThisBranch = workflowRun.getRepository().queryPullRequests().head(fullyQualifiedBranchName).list();
+        PagedIterable<GHPullRequest> pullRequestsForThisBranch = workflowRun.getRepository()
+                .queryPullRequests()
+                .state(GHIssueState.OPEN)
+                .sort(GHPullRequestQueryBuilder.Sort.UPDATED)
+                .direction(GHDirection.DESC)
+                .list();
 
         for (GHPullRequest pullRequest : pullRequestsForThisBranch) {
             if (headSha.equals(pullRequest.getHead().getSha())) {
@@ -119,8 +137,8 @@ public class ReportFlakyTests {
         logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
     }
 
-    public void createPullRequestReview(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
-        String body = getPullRequestReviewBody(flakyTest, workflowRun, pullRequest);
+    public void createPullRequestReview(List<FlakyTestParser.FlakyTest> flakyTests, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
+        String body = getPullRequestReviewBody(flakyTests, workflowRun, pullRequest);
         pullRequest
                 .createReview()
                 .event(GHPullRequestReviewEvent.REQUEST_CHANGES)
@@ -171,38 +189,41 @@ public class ReportFlakyTests {
         return body.toString();
     }
 
-    public String getPullRequestReviewBody(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
+    public String getPullRequestReviewBody(List<FlakyTestParser.FlakyTest> flakyTests, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
         StringBuilder body = new StringBuilder();
 
         body.append("## Unreported flaky test detected\n");
-        body.append("### ");
-        body.append(flakyTest.getClassName());
-        body.append("#");
-        body.append(flakyTest.getMethodName());
-        body.append("\n\n");
 
-        String issueTitle = URLEncoder.encode(getIssueTitle(flakyTest), StandardCharsets.UTF_8);
-        String issueBody = URLEncoder.encode(getIssueBody(flakyTest, workflowRun, pullRequest), StandardCharsets.UTF_8);
-        String issueLabels = URLEncoder.encode(Labels.FLAKY_TEST + "," + Labels.AREA_CI + "," + Labels.KIND_BUG, StandardCharsets.UTF_8);
+        for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
+            body.append("### ");
+            body.append(flakyTest.getClassName());
+            body.append("#");
+            body.append(flakyTest.getMethodName());
+            body.append("\n\n");
 
-        body.append("If the test is affected by these changes, please review and update the changes accordingly.\n\n");
-        body.append("Otherwise, a maintainer should [report the flaky test here](");
-        body.append(workflowRun.getRepository().getHtmlUrl());
-        body.append("/issues/new");
-        body.append("?title=");
-        body.append(issueTitle);
-        body.append("&labels=");
-        body.append(issueLabels);
-        body.append("&body=");
-        body.append(issueBody);
-        body.append("), and re-run the failed jobs afterwards.\n\n");
+            String issueTitle = URLEncoder.encode(getIssueTitle(flakyTest), StandardCharsets.UTF_8);
+            String issueBody = URLEncoder.encode(getIssueBody(flakyTest, workflowRun, pullRequest), StandardCharsets.UTF_8);
+            String issueLabels = URLEncoder.encode(Labels.FLAKY_TEST + "," + Labels.AREA_CI + "," + Labels.KIND_BUG, StandardCharsets.UTF_8);
 
-        body.append("### Errors\n");
+            body.append("If the test is affected by these changes, please review and update the changes accordingly.\n\n");
+            body.append("Otherwise, a maintainer should [report the flaky test here](");
+            body.append(workflowRun.getRepository().getHtmlUrl());
+            body.append("/issues/new");
+            body.append("?title=");
+            body.append(issueTitle);
+            body.append("&labels=");
+            body.append(issueLabels);
+            body.append("&body=");
+            body.append(issueBody);
+            body.append("), and re-run the failed jobs afterwards.\n\n");
 
-        for (String failure : flakyTest.getFailures()) {
-            body.append("\n```\n");
-            body.append(failure);
-            body.append("\n```\n");
+            body.append("### Errors\n");
+
+            for (String failure : flakyTest.getFailures()) {
+                body.append("\n```\n");
+                body.append(failure);
+                body.append("\n```\n");
+            }
         }
 
         return body.toString();

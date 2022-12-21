@@ -10,6 +10,7 @@ import org.kohsuke.github.GHWorkflowRun;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -84,7 +85,7 @@ public class ReportFlakyTestsTest {
         GHPullRequest pullRequest = mock(GHPullRequest.class);
         when(pullRequest.getHtmlUrl()).thenReturn(new URL("https://pull-request-link/123"));
 
-        assertEquals(expectedBody, reportFlakyTests.getPullRequestReviewBody(flakyTest, workflowRun, pullRequest));
+        assertEquals(expectedBody, reportFlakyTests.getPullRequestReviewBody(Collections.singletonList(flakyTest), workflowRun, pullRequest));
     }
 
 }
