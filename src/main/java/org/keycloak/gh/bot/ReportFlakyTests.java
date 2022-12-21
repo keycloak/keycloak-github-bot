@@ -40,14 +40,31 @@ public class ReportFlakyTests {
             return;
         }
 
+        if (GHEvent.PULL_REQUEST != workflowRun.getEvent() && !workflowRun.getHeadBranch().equals("main")) {
+            logger.infov("Ignoring event for branch {0}", workflowRun.getHeadBranch());
+            return;
+        }
+
         List<FlakyTestParser.FlakyTest> flakyTests = findFlakyTests(workflowRun);
         if (flakyTests.isEmpty()) {
             logger.infov("No flakes found in {0}", workflowRun.getHtmlUrl());
             return;
         }
 
-        GHPullRequest pullRequest = findPullRequest(workflowRun);
-        if (GHEvent.PULL_REQUEST == workflowRun.getEvent() && pullRequest != null) {
+        GHPullRequest pullRequest = null;
+        if (GHEvent.PULL_REQUEST == workflowRun.getEvent()) {
+            pullRequest = findPullRequest(workflowRun);
+
+            if (pullRequest == null) {
+                logger.errorv("Pull request event, but pull request not found for {0}", workflowRun.getHtmlUrl());
+                return;
+            }
+
+            if (!pullRequest.getBase().getRef().equals("main")) {
+                logger.infov("Ignoring pull request to branch {0}", workflowRun.getHeadBranch());
+                return;
+            }
+
             pullRequest.addLabels(Labels.FLAKY_TEST);
         }
 
@@ -92,10 +109,6 @@ public class ReportFlakyTests {
     }
 
     public GHPullRequest findPullRequest(GHWorkflowRun workflowRun) throws IOException {
-        if (GHEvent.PULL_REQUEST != workflowRun.getEvent()) {
-            return null;
-        }
-
         // workflowRun.getPullRequests() is empty for pull requests from a fork, although expensive listing through all
         // open pull requests seems to be the only way to find the pull request for the event.
 
@@ -113,7 +126,6 @@ public class ReportFlakyTests {
             }
         }
 
-        logger.errorv("Pull request event, but pull request not found for {0}", workflowRun.getHtmlUrl());
         return null;
     }
 
