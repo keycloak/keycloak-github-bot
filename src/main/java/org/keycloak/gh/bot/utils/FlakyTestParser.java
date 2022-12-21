@@ -61,7 +61,9 @@ public class FlakyTestParser {
         public void endElement(String uri, String localName, String qName) {
             switch (localName) {
                 case "testcase":
-                    flakyTests.add(currentFlakyTest);
+                    if (!currentFlakyTest.getFailures().isEmpty()) {
+                        flakyTests.add(currentFlakyTest);
+                    }
                     currentFlakyTest = null;
                     break;
                 case "stackTrace":
