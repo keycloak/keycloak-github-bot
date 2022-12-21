@@ -51,18 +51,22 @@ public class ReportFlakyTests {
             pullRequest.addLabels(Labels.FLAKY_TEST);
         }
 
+        List<FlakyTestParser.FlakyTest> unreportedFlakyTestsFromPr = new LinkedList<>();
+
         for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
             GHIssue issue = findIssue(gitHub, flakyTest);
 
             if (issue != null) {
                 createIssueComment(flakyTest, workflowRun, pullRequest, issue);
             } else if (GHEvent.PULL_REQUEST == workflowRun.getEvent()) {
-                if (pullRequest != null) {
-                    createPullRequestReview(flakyTest, workflowRun, pullRequest);
-                }
+                unreportedFlakyTestsFromPr.add(flakyTest);
             } else {
                 createIssue(flakyTest, workflowRun, null);
             }
+        }
+
+        if (!unreportedFlakyTestsFromPr.isEmpty() && pullRequest != null) {
+            createPullRequestReview(unreportedFlakyTestsFromPr, workflowRun, pullRequest);
         }
     }
 
@@ -133,8 +137,8 @@ public class ReportFlakyTests {
         logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
     }
 
-    public void createPullRequestReview(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
-        String body = getPullRequestReviewBody(flakyTest, workflowRun, pullRequest);
+    public void createPullRequestReview(List<FlakyTestParser.FlakyTest> flakyTests, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
+        String body = getPullRequestReviewBody(flakyTests, workflowRun, pullRequest);
         pullRequest
                 .createReview()
                 .event(GHPullRequestReviewEvent.REQUEST_CHANGES)
@@ -185,38 +189,41 @@ public class ReportFlakyTests {
         return body.toString();
     }
 
-    public String getPullRequestReviewBody(FlakyTestParser.FlakyTest flakyTest, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
+    public String getPullRequestReviewBody(List<FlakyTestParser.FlakyTest> flakyTests, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
         StringBuilder body = new StringBuilder();
 
         body.append("## Unreported flaky test detected\n");
-        body.append("### ");
-        body.append(flakyTest.getClassName());
-        body.append("#");
-        body.append(flakyTest.getMethodName());
-        body.append("\n\n");
 
-        String issueTitle = URLEncoder.encode(getIssueTitle(flakyTest), StandardCharsets.UTF_8);
-        String issueBody = URLEncoder.encode(getIssueBody(flakyTest, workflowRun, pullRequest), StandardCharsets.UTF_8);
-        String issueLabels = URLEncoder.encode(Labels.FLAKY_TEST + "," + Labels.AREA_CI + "," + Labels.KIND_BUG, StandardCharsets.UTF_8);
+        for (FlakyTestParser.FlakyTest flakyTest : flakyTests) {
+            body.append("### ");
+            body.append(flakyTest.getClassName());
+            body.append("#");
+            body.append(flakyTest.getMethodName());
+            body.append("\n\n");
 
-        body.append("If the test is affected by these changes, please review and update the changes accordingly.\n\n");
-        body.append("Otherwise, a maintainer should [report the flaky test here](");
-        body.append(workflowRun.getRepository().getHtmlUrl());
-        body.append("/issues/new");
-        body.append("?title=");
-        body.append(issueTitle);
-        body.append("&labels=");
-        body.append(issueLabels);
-        body.append("&body=");
-        body.append(issueBody);
-        body.append("), and re-run the failed jobs afterwards.\n\n");
+            String issueTitle = URLEncoder.encode(getIssueTitle(flakyTest), StandardCharsets.UTF_8);
+            String issueBody = URLEncoder.encode(getIssueBody(flakyTest, workflowRun, pullRequest), StandardCharsets.UTF_8);
+            String issueLabels = URLEncoder.encode(Labels.FLAKY_TEST + "," + Labels.AREA_CI + "," + Labels.KIND_BUG, StandardCharsets.UTF_8);
 
-        body.append("### Errors\n");
+            body.append("If the test is affected by these changes, please review and update the changes accordingly.\n\n");
+            body.append("Otherwise, a maintainer should [report the flaky test here](");
+            body.append(workflowRun.getRepository().getHtmlUrl());
+            body.append("/issues/new");
+            body.append("?title=");
+            body.append(issueTitle);
+            body.append("&labels=");
+            body.append(issueLabels);
+            body.append("&body=");
+            body.append(issueBody);
+            body.append("), and re-run the failed jobs afterwards.\n\n");
 
-        for (String failure : flakyTest.getFailures()) {
-            body.append("\n```\n");
-            body.append(failure);
-            body.append("\n```\n");
+            body.append("### Errors\n");
+
+            for (String failure : flakyTest.getFailures()) {
+                body.append("\n```\n");
+                body.append(failure);
+                body.append("\n```\n");
+            }
         }
 
         return body.toString();
