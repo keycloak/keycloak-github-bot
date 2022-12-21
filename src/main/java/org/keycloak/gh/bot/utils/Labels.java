@@ -29,9 +29,9 @@ public class Labels {
         if (!hasLabel(issue, areaLabel)) {
             if (hasLabel(issue.getRepository(), areaLabel)) {
                 issue.addLabels(areaLabel);
-                logger.infov("Added label " + areaLabel + " to issue '" + issue.getTitle() + "' #" + issue.getNumber());
+                logger.infov("Added label '{0}' to issue '{1}' #{2}", areaLabel, issue.getTitle(), issue.getNumber());
             } else {
-                logger.errorv("Label " + areaLabel + " not found for issue '" + issue.getTitle() + "' #" + issue.getNumber());
+                logger.errorv("Label '{0}' not found for issue '{1}' #{2}", areaLabel, issue.getTitle(), issue.getNumber());
             }
         }
     }
@@ -39,6 +39,7 @@ public class Labels {
     public static void removeLabel(GHIssue issue, String label) throws IOException {
         if (hasLabel(issue, label)) {
             issue.removeLabel(label);
+            logger.infov("Removed label '{0}' from issue '{1}' #{2}", label, issue.getTitle(), issue.getNumber());
         }
     }
 

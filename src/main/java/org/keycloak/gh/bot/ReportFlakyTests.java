@@ -5,6 +5,7 @@ import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.utils.FlakyTestParser;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHArtifact;
+import org.kohsuke.github.GHEvent;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHPullRequest;
@@ -45,7 +46,7 @@ public class ReportFlakyTests {
                             logger.infov("Flakes found in {0}, added comment to existing issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
                             flaky = true;
                         } else {
-                            if (pullRequest == null) {
+                            if (GHEvent.PULL_REQUEST != workflowRun.getEvent()) {
                                 issue = createIssue(flakyTest, workflowRun, null);
 
                                 logger.infov("Flakes found in {0}, created issue {1}", workflowRun.getHtmlUrl(), issue.getHtmlUrl());
@@ -116,7 +117,7 @@ public class ReportFlakyTests {
         body.append(workflowRun.getHtmlUrl().toString());
         body.append(")");
 
-        if (pullRequest != null) {
+        if (GHEvent.PULL_REQUEST == workflowRun.getEvent()) {
             String pullRequestUrl = pullRequest.getHtmlUrl().toString();
             String pullRequestNumber = pullRequestUrl.substring(pullRequestUrl.lastIndexOf('/') + 1);
 

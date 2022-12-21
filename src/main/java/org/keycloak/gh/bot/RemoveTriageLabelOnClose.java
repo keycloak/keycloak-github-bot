@@ -1,7 +1,6 @@
 package org.keycloak.gh.bot;
 
 import io.quarkiverse.githubapp.event.Issue;
-import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
