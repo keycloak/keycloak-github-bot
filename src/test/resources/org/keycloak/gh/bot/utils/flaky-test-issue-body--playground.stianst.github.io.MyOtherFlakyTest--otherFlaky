@@ -1,0 +1,10 @@
+## playground.stianst.github.io.MyOtherFlakyTest#otherFlaky
+[Keycloak CI - Unit Tests](https://github.com/stianst/playground/actions/runs/3821978350/jobs/6501658170)
+
+```
+java.lang.AssertionError: expected:<1> but was:<0>
+	at playground.stianst.github.io.MyOtherFlakyTest.otherFlaky(MyOtherFlakyTest.java:1)
+	at playground.stianst.github.io.MyOtherFlakyTest.otherFlaky(MyOtherFlakyTest.java:2)
+	at playground.stianst.github.io.MyOtherFlakyTest.otherFlaky(MyOtherFlakyTest.java:3)
+	at playground.stianst.github.io.MyOtherFlakyTest.otherFlaky(MyOtherFlakyTest.java:4)
+```

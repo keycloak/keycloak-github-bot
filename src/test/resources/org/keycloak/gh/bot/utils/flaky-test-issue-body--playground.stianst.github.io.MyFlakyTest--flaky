@@ -1,0 +1,7 @@
+## playground.stianst.github.io.MyFlakyTest#flaky
+[Keycloak CI - Base IT (1)](https://github.com/stianst/playground/actions/runs/3821978574/jobs/6501658733) / [Pull Request #65](https://github.com/stianst/playground/pull/65)
+
+```
+java.lang.AssertionError: expected:<1> but was:<0>
+	at playground.stianst.github.io.MyFlakyTest.flaky(MyFlakyTest.java:11)
+```

@@ -1,11 +1,10 @@
 ## Unreported flaky test detected
+If the below flaky tests below are affected by the changes, please review and update the changes accordingly. Otherwise, a maintainer should report the flaky tests prior to merging the PR.
+
 ### my.package.MyClass#myTest
 
-If the test is affected by these changes, please review and update the changes accordingly.
+[Keycloak CI - Job Name](https://job-url)
 
-Otherwise, a maintainer should [report the flaky test here](https://github.com/stianst/playground/issues/new?title=Flaky+test%3A+my.package.MyClass%23myTest&labels=flaky-test%2Carea%2Fci%2Ckind%2Fbug&body=%23%23+my.package.MyClass%23myTest%0A%5BRun+%28pull_request%29%5D%28https%3A%2F%2Fworkflow-link%29+%2F+%5BPull+Request+%23123%5D%28https%3A%2F%2Fpull-request-link%2F123%29%0A%0A%23%23%23+Errors%0A%0A%60%60%60%0AFailure+1%0A%09Second+line%0A%60%60%60%0A%0A%60%60%60%0AFailure+2%0A%60%60%60%0A), and re-run the failed jobs afterwards.
-
-### Errors
 
 ```
 Failure 1
@@ -15,3 +14,4 @@ Failure 1
 ```
 Failure 2
 ```
+[Report flaky test](https://github.com/stianst/playground/issues/new?title=Flaky+test%3A+my.package.MyClass%23myTest&labels=flaky-test%2Carea%2Fci%2Ckind%2Fbug&body=%23%23+my.package.MyClass%23myTest%0A%5BKeycloak+CI+-+Job+Name%5D%28https%3A%2F%2Fjob-url%29%0A%0A%60%60%60%0AFailure+1%0A%09Second+line%0A%60%60%60%0A%0A%60%60%60%0AFailure+2%0A%60%60%60%0A)
