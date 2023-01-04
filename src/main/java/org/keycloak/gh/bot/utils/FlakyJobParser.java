@@ -83,7 +83,7 @@ public class FlakyJobParser {
                     break;
                 case "stackTrace":
                     FAILURE_MAX_LINES = 5;
-                    currentFlakyTest.addFailure(StringUtils.trimLines(currentStackTrace.toString(), FAILURE_MAX_LINES));
+                    currentFlakyTest.addFailure(StringUtils.trimLines(currentStackTrace.toString(), FAILURE_MAX_LINES, true));
                     currentStackTrace = null;
                     break;
             }

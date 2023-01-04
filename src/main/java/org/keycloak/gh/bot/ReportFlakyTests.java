@@ -30,14 +30,11 @@ public class ReportFlakyTests {
     Logger logger = Logger.getLogger(ReportFlakyTests.class);
 
     void onCompleted(@WorkflowRun.Completed GHEventPayload.WorkflowRun workflowRunEvent, GitHub gitHub) throws IOException {
-        logger.infov("Workflow completed {0}", workflowRunEvent.getWorkflow().getName());
-
         GHWorkflow workflow = workflowRunEvent.getWorkflow();
         GHWorkflowRun workflowRun = workflowRunEvent.getWorkflowRun();
         boolean isPullRequest = GHEvent.PULL_REQUEST == workflowRun.getEvent();
 
         if(!workflow.getName().equals("Keycloak CI")) {
-            logger.infov("Ignoring workflow {0}", workflowRun.getName());
             return;
         }
 
