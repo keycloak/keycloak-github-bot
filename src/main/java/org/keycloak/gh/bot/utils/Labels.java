@@ -11,7 +11,7 @@ import java.io.IOException;
 
 public class Labels {
 
-    private static final Logger logger = Logger.getLogger(AddAreaLabelToBugs.class);
+    private static final Logger logger = Logger.getLogger(Labels.class);
 
     public static final String KIND_BUG = "kind/bug";
 
