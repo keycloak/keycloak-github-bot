@@ -10,9 +10,12 @@ import org.kohsuke.github.GHArtifact;
 import org.kohsuke.github.GHEvent;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueComment;
 import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHPullRequestReview;
 import org.kohsuke.github.GHPullRequestReviewEvent;
 import org.kohsuke.github.GHRepository;
+import org.kohsuke.github.GHUser;
 import org.kohsuke.github.GHWorkflow;
 import org.kohsuke.github.GHWorkflowRun;
 import org.kohsuke.github.GitHub;
@@ -76,8 +79,12 @@ public class ReportFlakyTests {
             }
         }
 
-        if (!unreportedFlakyTestsFromPr.isEmpty() && pullRequest != null) {
-            createPullRequestReview(unreportedFlakyTestsFromPr, workflowRun, pullRequest);
+        if (pullRequest != null) {
+            if (!unreportedFlakyTestsFromPr.isEmpty()) {
+                createPullRequestReview(unreportedFlakyTestsFromPr, workflowRun, pullRequest);
+            } else {
+                deleteBotPullRequestReview(pullRequest, true);
+            }
         }
     }
 
@@ -133,12 +140,46 @@ public class ReportFlakyTests {
     }
 
     public void createPullRequestReview(List<FlakyTest> flakyTests, GHWorkflowRun workflowRun, GHPullRequest pullRequest) throws IOException {
+        boolean reviewExists = deleteBotPullRequestReview(pullRequest, false);
+
         String body = getPullRequestReviewBody(flakyTests, workflowRun.getRepository().getHtmlUrl());
-        pullRequest
-                .createReview()
-                .event(GHPullRequestReviewEvent.REQUEST_CHANGES)
-                .body(body)
-                .create();
+
+        if (!reviewExists) {
+            pullRequest
+                    .createReview()
+                    .event(GHPullRequestReviewEvent.COMMENT)
+                    .body("Unreported flaky test detected, please review")
+                    .create();
+        }
+
+        pullRequest.comment(body);
+    }
+
+    public boolean deleteBotPullRequestReview(GHPullRequest pullRequest, boolean dismissReview) throws IOException {
+        boolean reviewFound = false;
+
+        PagedIterator<GHPullRequestReview> reviewItr = pullRequest.listReviews().iterator();
+        while (reviewItr.hasNext()) {
+            GHPullRequestReview review = reviewItr.next();
+            GHUser user = review.getUser();
+            if (user.getType().equals("Bot") && user.getLogin().startsWith("keycloak-bot")) {
+                reviewFound = true;
+                if (dismissReview) {
+                    review.dismiss("Flaky tests resolved or reported");
+                }
+            }
+        }
+
+        PagedIterator<GHIssueComment> commentItr = pullRequest.listComments().iterator();
+        while (commentItr.hasNext()) {
+            GHIssueComment comment = commentItr.next();
+            GHUser user = comment.getUser();
+            if (user.getType().equals("Bot") && user.getLogin().startsWith("keycloak-bot")) {
+                comment.delete();
+            }
+        }
+
+        return reviewFound;
     }
 
     public String getPullRequestReviewBody(List<FlakyTest> flakyTests, URL repositoryUrl) {
