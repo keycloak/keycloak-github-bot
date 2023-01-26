@@ -19,7 +19,7 @@ public class AddAreaLabelToBugs {
         if (Labels.hasLabel(issue, Labels.KIND_BUG)) {
             String areaLabel = IssueParser.getAreaFromBody(issuePayload.getIssue().getBody());
             if (areaLabel != null) {
-                Labels.addArea(issue, areaLabel);
+                Labels.addLabelIfExists(issue, areaLabel);
             }
         }
     }
