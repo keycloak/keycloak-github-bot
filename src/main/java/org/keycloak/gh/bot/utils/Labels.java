@@ -3,7 +3,6 @@ package org.keycloak.gh.bot.utils;
 import org.jboss.logging.Logger;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHLabel;
-import org.kohsuke.github.GHPullRequest;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.PagedIterator;
 
