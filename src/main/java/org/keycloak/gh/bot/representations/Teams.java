@@ -30,4 +30,7 @@ public class Teams extends HashMap<String, List<String>> {
         return teams;
     }
 
+    public Teams() {
+    }
+
 }
