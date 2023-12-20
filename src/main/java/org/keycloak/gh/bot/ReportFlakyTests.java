@@ -186,7 +186,7 @@ public class ReportFlakyTests {
         StringBuilder body = new StringBuilder();
 
         body.append("## Unreported flaky test detected\n");
-        body.append("If the below flaky tests below are affected by the changes, please review and update the changes accordingly. Otherwise, a maintainer should report the flaky tests prior to merging the PR.\n\n");
+        body.append("If the flaky tests below are affected by the changes, please review and update the changes accordingly. Otherwise, a maintainer should report the flaky tests prior to merging the PR.\n\n");
 
         for (FlakyTest flakyTest : flakyTests) {
             body.append("### ");
