@@ -1,5 +1,5 @@
 ## Unreported flaky test detected
-If the below flaky tests below are affected by the changes, please review and update the changes accordingly. Otherwise, a maintainer should report the flaky tests prior to merging the PR.
+If the flaky tests below are affected by the changes, please review and update the changes accordingly. Otherwise, a maintainer should report the flaky tests prior to merging the PR.
 
 ### my.package.MyClass#myTest
 
