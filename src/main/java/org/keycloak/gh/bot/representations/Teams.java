@@ -6,9 +6,7 @@ import org.jboss.logging.Logger;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 public class Teams extends HashMap<String, List<String>> {
 
@@ -30,7 +28,15 @@ public class Teams extends HashMap<String, List<String>> {
             ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
             teams = yamlMapper.readValue(url, Teams.class);
 
-            teams.keySet().removeIf(s -> !s.startsWith("team/"));
+            Iterator<Entry<String, List<String>>> itr = teams.entrySet().iterator();
+            while (itr.hasNext()) {
+                Entry<String, List<String>> e = itr.next();
+                if (!e.getKey().startsWith("team/")) {
+                    itr.remove();
+                } else if (e.getValue() == null) {
+                    e.setValue(Collections.EMPTY_LIST);
+                }
+            }
 
             lastUpdated = System.currentTimeMillis();
             log.infov("Updating teams list from {0}", TEAMS_URL);
