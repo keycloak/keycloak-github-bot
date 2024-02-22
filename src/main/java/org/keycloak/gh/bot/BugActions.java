@@ -19,6 +19,7 @@ import org.kohsuke.github.GHLabel;
 import org.kohsuke.github.GHMilestone;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.PagedIterator;
+import org.kohsuke.github.ReactionContent;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -63,6 +64,7 @@ public class BugActions {
             BugAction.create(Action.PRIORITY_NORMAL)
                     .priority(Priority.NORMAL)
                     .comment()
+                    .thumbsUp()
                     .helpWanted()
                     .autoExpire()
                     .autoBump()
@@ -70,6 +72,7 @@ public class BugActions {
             BugAction.create(Action.PRIORITY_LOW)
                     .priority(Priority.LOW)
                     .comment()
+                    .thumbsUp()
                     .helpWanted()
                     .autoExpire()
                     .autoBump()
@@ -127,6 +130,10 @@ public class BugActions {
 
                 if (action.autoBump) {
                     labelsToAdd.add(Status.AUTO_BUMP.toLabel());
+                }
+
+                if (action.thumbsUp) {
+                    issue.createReaction(ReactionContent.PLUS_ONE);
                 }
 
                 labelsToRemove.add(action.action.toLabel());
@@ -218,6 +225,8 @@ public class BugActions {
         boolean autoExpire = false;
         boolean autoBump = false;
 
+        boolean thumbsUp = false;
+
         public static BugAction create(Action action) {
             return new BugAction(action);
         }
@@ -273,6 +282,11 @@ public class BugActions {
 
         BugAction autoBump() {
             this.autoBump = true;
+            return this;
+        }
+
+        BugAction thumbsUp() {
+            this.thumbsUp = true;
             return this;
         }
 
