@@ -78,6 +78,7 @@ public class BugActionScheduleExpireMissingInfo {
                     String comment = messages.getExpireComment(expirationValue, expirationUnit);
                     issue.comment(comment);
                     issue.removeLabels(Status.MISSING_INFORMATION.toLabel());
+                    issue.addLabels(Status.EXPIRED_BY_BOT.toLabel());
                     issue.close(GHIssueStateReason.NOT_PLANNED);
                     lastChecked.remove(issue);
                     logger.infov("Expired: issue={0}", issue.getNumber());
