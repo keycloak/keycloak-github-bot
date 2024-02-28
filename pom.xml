@@ -15,12 +15,12 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.7.3</quarkus.platform.version>
+        <quarkus.platform.version>3.7.4</quarkus.platform.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.2.5</surefire-plugin.version>
         <version.buildnumber.plugin>3.2.0</version.buildnumber.plugin>
-        <quarkus.version>3.7.3</quarkus.version>
-        <quarkus-github-app.version>2.1.0</quarkus-github-app.version>
+        <quarkus.version>3.7.4</quarkus.version>
+        <quarkus-github-app.version>2.3.1</quarkus-github-app.version>
         <commons-io.version>2.15.1</commons-io.version>
         <hamcrest.version>2.2</hamcrest.version>
         <mockito-core.version>5.10.0</mockito-core.version>
@@ -37,11 +37,6 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
-        <dependency>
-            <groupId>org.kohsuke</groupId>
-            <artifactId>github-api</artifactId>
-            <version>1.319</version>
-        </dependency>
         <dependency>
             <groupId>io.quarkiverse.githubapp</groupId>
             <artifactId>quarkus-github-app</artifactId>
