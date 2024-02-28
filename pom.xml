@@ -8,16 +8,22 @@
     <version>1.0.0-SNAPSHOT</version>
     <properties>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
-        <maven.compiler.release>11</maven.compiler.release>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>2.13.3.Final</quarkus.platform.version>
+        <quarkus.platform.version>3.7.3</quarkus.platform.version>
         <skipITs>true</skipITs>
-        <surefire-plugin.version>3.0.0-M7</surefire-plugin.version>
-        <version.buildnumber.plugin>3.0.0</version.buildnumber.plugin>
-        <quarkus.version>2.13.3.Final</quarkus.version>
+        <surefire-plugin.version>3.2.5</surefire-plugin.version>
+        <version.buildnumber.plugin>3.2.0</version.buildnumber.plugin>
+        <quarkus.version>3.7.3</quarkus.version>
+        <quarkus-github-app.version>2.1.0</quarkus-github-app.version>
+        <commons-io.version>2.15.1</commons-io.version>
+        <hamcrest.version>2.2</hamcrest.version>
+        <mockito-core.version>5.10.0</mockito-core.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -32,15 +38,15 @@
     </dependencyManagement>
     <dependencies>
         <dependency>
+            <groupId>org.kohsuke</groupId>
+            <artifactId>github-api</artifactId>
+            <version>1.319</version>
+        </dependency>
+        <dependency>
             <groupId>io.quarkiverse.githubapp</groupId>
             <artifactId>quarkus-github-app</artifactId>
-            <version>1.14.0</version>
+            <version>${quarkus-github-app.version}</version>
         </dependency>
-<!--        <dependency>-->
-<!--            <groupId>io.quarkiverse.githubapp</groupId>-->
-<!--            <artifactId>quarkus-github-app-command-airline</artifactId>-->
-<!--            <version>1.15.1</version>-->
-<!--        </dependency>-->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-openshift</artifactId>
@@ -50,9 +56,13 @@
             <artifactId>quarkus-arc</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-scheduler</artifactId>
+        </dependency>
+        <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
-            <version>2.11.0</version>
+            <version>${commons-io.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -62,13 +72,13 @@
         <dependency>
             <groupId>org.hamcrest</groupId>
             <artifactId>hamcrest</artifactId>
-            <version>2.2</version>
+            <version>${hamcrest.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>4.10.0</version>
+            <version>${mockito-core.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

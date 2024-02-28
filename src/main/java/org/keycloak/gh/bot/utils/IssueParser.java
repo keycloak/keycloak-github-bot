@@ -18,4 +18,8 @@ public class IssueParser {
         }
     }
 
+    public static boolean isRegression(String body) {
+        return body.contains("- [X] The issue is a regressions");
+    }
+
 }
