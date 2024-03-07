@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import org.keycloak.gh.bot.labels.Action;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueState;
 
 import java.io.IOException;
 
@@ -17,7 +18,7 @@ public class BugActionsOnLabel {
         String label = payload.getLabel().getName();
         GHIssue issue = payload.getIssue();
 
-        if (Action.isInstance(label)) {
+        if (issue.getState().equals(GHIssueState.OPEN) && Action.isInstance(label)) {
             Action action = Action.fromLabel(label);
             bugActions.runAction(action, issue);
         }
