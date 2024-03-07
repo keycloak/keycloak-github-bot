@@ -21,10 +21,11 @@ public class BugActionsOnComment {
     void onCommentCreated(@IssueComment.Created GHEventPayload.IssueComment payload) throws IOException {
         if (Labels.hasLabel(payload.getIssue(), Kind.BUG.toLabel())) {
             Action action = getAction(payload.getComment().getBody());
-
-            GHUser sender = payload.getSender();
-            if (sender.getType().equals("User") && sender.isMemberOf(payload.getOrganization())) {
-                bugActions.runAction(action, payload.getIssue());
+            if (action != null) {
+                GHUser sender = payload.getSender();
+                if (sender.getType().equals("User") && sender.isMemberOf(payload.getOrganization())) {
+                    bugActions.runAction(action, payload.getIssue());
+                }
             }
         }
     }
