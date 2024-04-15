@@ -7,6 +7,10 @@ import org.keycloak.gh.bot.labels.Action;
 import org.keycloak.gh.bot.labels.Kind;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHEventPayload;
+import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueComment;
+import org.kohsuke.github.GHIssueState;
+import org.kohsuke.github.GHOrganization;
 import org.kohsuke.github.GHUser;
 
 import java.io.IOException;
@@ -19,12 +23,16 @@ public class BugActionsOnComment {
     BugActions bugActions;
 
     void onCommentCreated(@IssueComment.Created GHEventPayload.IssueComment payload) throws IOException {
-        if (Labels.hasLabel(payload.getIssue(), Kind.BUG.toLabel())) {
-            Action action = getAction(payload.getComment().getBody());
+        GHIssue issue = payload.getIssue();
+
+        if (issue.getState().equals(GHIssueState.OPEN) && Labels.hasLabel(issue, Kind.BUG.toLabel())) {
+            GHIssueComment comment = payload.getComment();
+            Action action = getAction(comment.getBody());
             if (action != null) {
                 GHUser sender = payload.getSender();
-                if (sender.getType().equals("User") && sender.isMemberOf(payload.getOrganization())) {
-                    bugActions.runAction(action, payload.getIssue());
+                GHOrganization organization = payload.getOrganization();
+                if (sender.getType().equals("User") && sender.isMemberOf(organization)) {
+                    bugActions.runAction(action, issue);
                 }
             }
         }
