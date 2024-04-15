@@ -20,7 +20,7 @@
         <surefire-plugin.version>3.2.5</surefire-plugin.version>
         <version.buildnumber.plugin>3.2.0</version.buildnumber.plugin>
         <quarkus.version>3.7.4</quarkus.version>
-        <quarkus-github-app.version>2.3.1</quarkus-github-app.version>
+        <quarkus-github-app.version>2.5.1</quarkus-github-app.version>
         <commons-io.version>2.15.1</commons-io.version>
         <hamcrest.version>2.2</hamcrest.version>
         <mockito-core.version>5.10.0</mockito-core.version>
