@@ -57,7 +57,6 @@ public class BugActions {
                     .closeAsNotPlanned(),
             BugAction.create(Action.PRIORITY_REGRESSION)
                     .priority(Priority.BLOCKER)
-                    .kind(Kind.REGRESSION)
                     .nextMilestone(),
             BugAction.create(Action.PRIORITY_IMPORTANT)
                     .priority(Priority.IMPORTANT),

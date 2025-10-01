@@ -2,8 +2,7 @@ package org.keycloak.gh.bot.labels;
 
 public enum Kind {
 
-    BUG,
-    REGRESSION;
+    BUG;
 
     @Override
     public String toString() {
