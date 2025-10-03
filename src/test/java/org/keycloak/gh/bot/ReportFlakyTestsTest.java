@@ -60,12 +60,12 @@ public class ReportFlakyTestsTest {
 
         assertThat(flakyTests.get(0).getClassName(), equalTo("org.keycloak.testsuite.model.FlakyTest"));
         assertThat(flakyTests.get(0).getMethodName(), equalTo("flakyErrorTest"));
-        assertThat(flakyTests.get(0).getFailures(), hasSize(1));
+        assertThat(flakyTests.get(0).getFailures(), hasSize(2));
         assertThat(flakyTests.get(0).getFailures().get(0), containsString("java.lang.RuntimeException: Flaky runtime exception"));
 
         assertThat(flakyTests.get(1).getClassName(), equalTo("org.keycloak.testsuite.model.FlakyTest"));
         assertThat(flakyTests.get(1).getMethodName(), equalTo("flakyFailureTest"));
-        assertThat(flakyTests.get(1).getFailures(), hasSize(1));
+        assertThat(flakyTests.get(1).getFailures(), hasSize(2));
         assertThat(flakyTests.get(1).getFailures().get(0), containsString("java.lang.AssertionError"));
         assertThat(flakyTests.get(1).getFailures().get(0), containsString("at org.junit.Assert.fail(Assert.java:87)"));
 
