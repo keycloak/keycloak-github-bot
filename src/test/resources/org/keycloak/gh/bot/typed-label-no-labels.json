@@ -1,0 +1,13 @@
+{
+  "issue": {
+    "number": 1234,
+    "labels": [
+      {
+        "name": "status/triage"
+      }
+    ]
+  },
+  "type": {
+    "name": "cve"
+  }
+}

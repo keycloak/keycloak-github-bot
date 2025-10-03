@@ -23,7 +23,7 @@
         <quarkus-github-app.version>2.5.1</quarkus-github-app.version>
         <commons-io.version>2.15.1</commons-io.version>
         <hamcrest.version>2.2</hamcrest.version>
-        <mockito-core.version>5.10.0</mockito-core.version>
+        <mockito-core.version>5.20.0</mockito-core.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -131,6 +131,7 @@
                 <version>${surefire-plugin.version}</version>
                 <configuration>
                     <systemPropertyVariables>
+                        <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
