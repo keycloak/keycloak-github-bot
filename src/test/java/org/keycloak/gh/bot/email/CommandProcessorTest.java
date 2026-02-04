@@ -2,12 +2,11 @@ package org.keycloak.gh.bot.email;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.QuarkusTestProfile;
-import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.keycloak.gh.bot.GitHubInstallationProvider;
 import org.keycloak.gh.bot.email.CommandParser.Command;
 import org.keycloak.gh.bot.email.CommandParser.CommandType;
 import org.kohsuke.github.GHIssue;
@@ -22,7 +21,6 @@ import org.kohsuke.github.ReactionContent;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 
@@ -34,7 +32,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
-@TestProfile(CommandProcessorTest.ConfigProfile.class)
 public class CommandProcessorTest {
 
     @Inject
@@ -48,6 +45,9 @@ public class CommandProcessorTest {
 
     @InjectMock
     CommandParser commandParser;
+
+    @InjectMock
+    GitHubInstallationProvider gitHubInstallationProvider;
 
     @ConfigProperty(name = "quarkus.application.name")
     String botName;
@@ -140,20 +140,5 @@ public class CommandProcessorTest {
         when(comment.listReactions()).thenReturn(reactions);
 
         return comment;
-    }
-
-    public static class ConfigProfile implements QuarkusTestProfile {
-        @Override
-        public Map<String, String> getConfigOverrides() {
-            return Map.of(
-                    "GMAIL_CLIENT_ID", "mock-client-id",
-                    "GMAIL_CLIENT_SECRET", "mock-client-secret",
-                    "GMAIL_REFRESH_TOKEN", "mock-refresh-token",
-                    "GMAIL_USER_EMAIL", "mock-email@example.com",
-                    "email.target.secalert", "mock-target@example.com",
-                    "google.group.target", "mock-group@example.com",
-                    "quarkus.application.name", "test-bot"
-            );
-        }
     }
 }
