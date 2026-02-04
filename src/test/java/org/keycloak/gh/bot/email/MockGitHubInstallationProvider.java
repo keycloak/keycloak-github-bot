@@ -9,6 +9,8 @@ import org.keycloak.gh.bot.GitHubInstallationProvider;
 import org.kohsuke.github.GitHub;
 import org.mockito.Mockito;
 
+import java.io.IOException;
+
 @Mock
 @Alternative
 @Priority(1)
@@ -17,8 +19,7 @@ public class MockGitHubInstallationProvider extends GitHubInstallationProvider {
 
     @Override
     @PostConstruct
-    public void init() {
-        // Stop the real init() from calling GitHub API during startup
+    public void init() throws IOException {
     }
 
     @Override
