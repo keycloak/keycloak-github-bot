@@ -32,6 +32,8 @@ import static org.mockito.Mockito.when;
 
 @QuarkusTest
 public class CommandProcessorTest {
+    // ... (Your test methods remain exactly as they were) ...
+    // Ensure NO ConfigProfile inner class
 
     @Inject
     CommandProcessor commandProcessor;

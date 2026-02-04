@@ -25,8 +25,6 @@ jobs:
           GMAIL_REFRESH_TOKEN: dummy
           GMAIL_USER_EMAIL: bot@test.com
           QUARKUS_GITHUB_APP_APP_ID: 12345
-          # This is a REAL, valid 2048-bit RSA Private Key.
-          # The pipe | ensures newlines are preserved.
           QUARKUS_GITHUB_APP_PRIVATE_KEY: |
             -----BEGIN RSA PRIVATE KEY-----
             MIIEowIBAAKCAQEAxlVR3TIkouAOvH79vaJTgFhpfvVKQIeVkFRZPVXK/zY0Gvrh

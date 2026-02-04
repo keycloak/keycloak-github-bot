@@ -1,0 +1,40 @@
+quarkus.application.name=keycloak-github-bot
+quarkus.application.version=${buildNumber:999-SNAPSHOT}
+
+quarkus.openshift.labels."app"=keycloak-github-bot
+quarkus.openshift.annotations."kubernetes.io/tls-acme"=true
+quarkus.openshift.env.vars.QUARKUS_GITHUB_APP_APP_ID=817634
+quarkus.openshift.env.vars.QUARKUS_GITHUB_APP_APP_NAME=keycloak-github-bot
+quarkus.openshift.env.vars.QUARKUS_OPTS=-Dquarkus.http.host=0.0.0.0 -Xmx150m
+quarkus.openshift.env.secrets=keycloak-github-bot
+
+quarkus.openshift.idempotent=true
+
+
+missingInfo.cron=0 4 * * * ?
+missingInfo.expiration.unit=DAYS
+missingInfo.expiration.value=14
+
+autoBump.cron=0 5 * * * ?
+autoBump.low.reactions=5
+autoBump.normal.reactions=10
+
+autoExpire.cron=0 6 * * * ?
+autoExpire.low.expiresDays=90
+autoExpire.normal.expiresDays=180
+
+quarkus.scheduler.enabled=true
+
+# --- Gmail Credentials ---
+gmail.client.id=${GMAIL_CLIENT_ID}
+gmail.client.secret=${GMAIL_CLIENT_SECRET}
+gmail.refresh.token=${GMAIL_REFRESH_TOKEN}
+gmail.user.email=${GMAIL_USER_EMAIL}
+
+# --- Targets ---
+google.group.target=keycloak-security-lab@googlegroups.com
+email.target.secalert=bruno@abstractj.org
+
+# --- Test Configuration ---
+# Disable scheduler during tests
+%test.quarkus.scheduler.enabled=false
