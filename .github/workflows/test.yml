@@ -11,11 +11,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-java@v3
-      with:
-        java-version: 17
-        distribution: temurin
-        cache: maven
-    - name: Test
-      run: ./mvnw -B package -Dquarkus.native.container-build=true
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: temurin
+          cache: maven
+      - name: Test
+        run: ./mvnw -B package
+        env:
+          # --- Satisfy Gmail Config ---
+          GMAIL_CLIENT_ID: dummy
+          GMAIL_CLIENT_SECRET: dummy
+          GMAIL_REFRESH_TOKEN: dummy
+          GMAIL_USER_EMAIL: bot@test.com
+          QUARKUS_GITHUB_APP_APP_ID: 12345
+          QUARKUS_GITHUB_APP_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY----- dummy -----END RSA PRIVATE KEY-----"
