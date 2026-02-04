@@ -72,6 +72,7 @@ public class CommandProcessorTest {
         );
 
         when(issue.getComments()).thenReturn(List.of(comment));
+
         mockQueryComments(issue, List.of(comment));
 
         when(githubAdapter.getIssuesUpdatedSince(any())).thenReturn(List.of(issue));
@@ -94,7 +95,9 @@ public class CommandProcessorTest {
         );
 
         when(comment.getBody()).thenReturn("**Gmail-Thread-ID:** " + THREAD_ID);
+
         when(issue.getComments()).thenReturn(List.of(comment));
+
         mockQueryComments(issue, List.of(comment));
 
         when(githubAdapter.getIssuesUpdatedSince(any())).thenReturn(List.of(issue));
