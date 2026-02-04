@@ -2,10 +2,13 @@ package org.keycloak.gh.bot.email;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.keycloak.gh.bot.GitHubInstallationProvider;
 import org.keycloak.gh.bot.email.CommandParser.Command;
 import org.keycloak.gh.bot.email.CommandParser.CommandType;
 import org.kohsuke.github.GHIssue;
@@ -16,12 +19,15 @@ import org.kohsuke.github.GHUser;
 import org.kohsuke.github.PagedIterable;
 import org.kohsuke.github.PagedIterator;
 import org.kohsuke.github.ReactionContent;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,6 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
+@TestProfile(CommandProcessorTest.EmailTestProfile.class)
 public class CommandProcessorTest {
 
     @Inject
@@ -136,5 +143,25 @@ public class CommandProcessorTest {
         when(comment.listReactions()).thenReturn(reactions);
 
         return comment;
+    }
+
+    public static class EmailTestProfile implements QuarkusTestProfile {
+        @Override
+        public Map<String, String> getConfigOverrides() {
+            return Map.of(
+                    "GMAIL_CLIENT_ID", "test",
+                    "GMAIL_CLIENT_SECRET", "test",
+                    "GMAIL_REFRESH_TOKEN", "test",
+                    "GMAIL_USER_EMAIL", "test@test.com",
+                    "email.target.secalert", "test@test.com",
+                    "google.group.target", "test@test.com",
+                    "quarkus.application.name", "test-bot"
+            );
+        }
+
+        @Override
+        public Set<Class<?>> getEnabledAlternatives() {
+            return Collections.singleton(MockGitHubInstallationProvider.class);
+        }
     }
 }
