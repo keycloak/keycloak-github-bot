@@ -1,8 +1,10 @@
 package org.keycloak.gh.bot.email;
 
 import io.quarkus.test.InjectMock;
+import io.quarkus.test.Mock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import org.kohsuke.github.GHUser;
 import org.kohsuke.github.PagedIterable;
 import org.kohsuke.github.PagedIterator;
 import org.kohsuke.github.ReactionContent;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -45,9 +48,6 @@ public class CommandProcessorTest {
 
     @InjectMock
     CommandParser commandParser;
-
-    @InjectMock
-    GitHubInstallationProvider gitHubInstallationProvider;
 
     @ConfigProperty(name = "quarkus.application.name")
     String botName;
@@ -140,5 +140,18 @@ public class CommandProcessorTest {
         when(comment.listReactions()).thenReturn(reactions);
 
         return comment;
+    }
+
+    @Mock
+    @Singleton
+    public static class MockGitHubInstallationProvider extends GitHubInstallationProvider {
+        @Override
+        public void init() {
+        }
+
+        @Override
+        public org.kohsuke.github.GitHub getGitHub() {
+            return Mockito.mock(org.kohsuke.github.GitHub.class);
+        }
     }
 }
