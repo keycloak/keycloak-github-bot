@@ -15,6 +15,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -92,6 +93,36 @@ public class GmailAdapter {
             return decode(body.getData());
         }
         return getBestContent(message.getPayload().getParts());
+    }
+
+    public record Attachment(String fileName, String mimeType, byte[] content) {}
+
+    public List<Attachment> getAttachments(Message message) {
+        List<Attachment> attachments = new ArrayList<>();
+        if (message.getPayload() != null && message.getPayload().getParts() != null) {
+            collectAttachments(message.getId(), message.getPayload().getParts(), attachments);
+        }
+        return attachments;
+    }
+
+    private void collectAttachments(String messageId, List<MessagePart> parts, List<Attachment> attachments) {
+        for (MessagePart part : parts) {
+            if (part.getFilename() != null && !part.getFilename().isEmpty() && part.getBody() != null && part.getBody().getAttachmentId() != null) {
+                try {
+                    byte[] data = fetchAttachment(messageId, part.getBody().getAttachmentId());
+                    attachments.add(new Attachment(part.getFilename(), part.getMimeType(), data));
+                } catch (IOException e) {
+                }
+            }
+            if (part.getParts() != null) {
+                collectAttachments(messageId, part.getParts(), attachments);
+            }
+        }
+    }
+
+    private byte[] fetchAttachment(String messageId, String attachmentId) throws IOException {
+        MessagePartBody attachPart = gmail.users().messages().attachments().get("me", messageId, attachmentId).execute();
+        return Base64.getUrlDecoder().decode(attachPart.getData());
     }
 
     private String getBestContent(List<MessagePart> parts) {

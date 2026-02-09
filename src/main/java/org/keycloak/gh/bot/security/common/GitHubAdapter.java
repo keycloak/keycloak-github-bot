@@ -5,6 +5,8 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.GitHubInstallationProvider;
+import org.kohsuke.github.GHContent;
+import org.kohsuke.github.GHContentUpdateResponse;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHRepository;
@@ -15,9 +17,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Adapts GitHub API operations for the security domain with optimized searches.
- */
 @ApplicationScoped
 public class GitHubAdapter {
 
@@ -62,6 +61,25 @@ public class GitHubAdapter {
         LOG.debugf("📝 Updated Issue #%d: Title='%s', Added Label='%s'", issue.getNumber(), newTitle, additionalLabel);
     }
 
+    public String uploadFile(String threadId, String fileName, byte[] content) throws IOException {
+        String path = "attachments/" + threadId + "/" + fileName;
+        String message = "Upload attachment " + fileName + " for thread " + threadId;
+
+        GHContentUpdateResponse response = uploadToRepo(path, content, message);
+
+        GHContent ghContent = response.getContent();
+        LOG.debugf("📁 Uploaded file %s to %s", fileName, path);
+        return ghContent.getHtmlUrl();
+    }
+
+    protected GHContentUpdateResponse uploadToRepo(String path, byte[] content, String message) throws IOException {
+        return getRepository().createContent()
+                .path(path)
+                .content(content)
+                .message(message)
+                .commit();
+    }
+
     public Optional<GHIssue> findOpenEmailIssueByThreadId(String threadId) throws IOException {
         if (isAccessDenied()) return Optional.empty();
 
@@ -89,10 +107,6 @@ public class GitHubAdapter {
                 .toList();
     }
 
-    /**
-     * Fetches open security issues that need Jira synchronization.
-     * Filters for 'kind/cve' AND excludes 'status/jira-synced'.
-     */
     public List<GHIssue> getOpenCveIssues() throws IOException {
         if (isAccessDenied()) return List.of();
 

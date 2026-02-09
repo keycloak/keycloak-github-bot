@@ -68,22 +68,36 @@ public class MailProcessor {
             }
 
             String threadId = msg.getThreadId();
-
             String subject = headers.getOrDefault("Subject", "").trim();
             if (subject.isEmpty()) {
                 subject = "(No Subject)";
             }
 
             String cleanBody = sanitizeBody(gmail.getBody(msg)).orElse("(No content)");
+            List<GmailAdapter.Attachment> attachments = gmail.getAttachments(msg);
+
+            StringBuilder attachmentLinks = new StringBuilder();
+            if (!attachments.isEmpty()) {
+                attachmentLinks.append("\n\nAttachments:");
+                for (GmailAdapter.Attachment att : attachments) {
+                    try {
+                        String url = github.uploadFile(threadId, att.fileName(), att.content());
+                        attachmentLinks.append("\n- [").append(att.fileName()).append("](").append(url).append(")");
+                    } catch (IOException e) {
+                        LOG.errorf(e, "Failed to upload attachment %s", att.fileName());
+                        attachmentLinks.append("\n- ").append(att.fileName()).append(" (Upload Failed)");
+                    }
+                }
+            }
 
             Optional<GHIssue> existingIssue = github.findOpenEmailIssueByThreadId(threadId);
 
             if (existingIssue.isPresent()) {
                 GHIssue issue = existingIssue.get();
                 processCveUpdates(issue, from, cleanBody);
-                appendComment(issue, from, cleanBody, threadId);
+                appendComment(issue, from, subject, cleanBody, threadId, attachmentLinks.toString());
             } else {
-                createNewIssue(threadId, subject, from, cleanBody);
+                createNewIssue(threadId, subject, from, cleanBody, attachmentLinks.toString());
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -140,12 +154,13 @@ public class MailProcessor {
         }
     }
 
-    private void appendComment(GHIssue issue, String from, String body, String threadId) throws IOException {
-        github.commentOnIssue(issue, "**Reply from " + from + ":**\n\n" + body);
+    private void appendComment(GHIssue issue, String from, String subject, String body, String threadId, String attachmentSection) throws IOException {
+        String comment = buildGitHubComment(threadId, from, subject, body, attachmentSection);
+        github.commentOnIssue(issue, comment);
         LOG.debugf("✅ Commented on #%d (Thread %s)", issue.getNumber(), threadId);
     }
 
-    private void createNewIssue(String threadId, String subject, String from, String body) throws IOException {
+    private void createNewIssue(String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
         GHIssue newIssue = github.createSecurityIssue(subject, Constants.ISSUE_DESCRIPTION_TEMPLATE, Constants.SOURCE_EMAIL);
         if (newIssue != null) {
             try {
@@ -153,8 +168,19 @@ public class MailProcessor {
             } catch (IOException e) {
                 LOG.errorf(e, "Failed to label issue #%d", newIssue.getNumber());
             }
-            github.commentOnIssue(newIssue, Constants.GMAIL_THREAD_ID_PREFIX + " " + threadId + "\n**From:** " + from + "\n\n" + body);
+            String comment = buildGitHubComment(threadId, from, subject, body, attachmentSection);
+            github.commentOnIssue(newIssue, comment);
         }
+    }
+
+    private String buildGitHubComment(String threadId, String from, String subject, String body, String attachmentSection) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(Constants.GMAIL_THREAD_ID_PREFIX).append(" ").append(threadId).append("\n");
+        sb.append("Subject: ").append(subject).append("\n");
+        sb.append("From: ").append(from).append("\n\n");
+        sb.append(body);
+        sb.append(attachmentSection);
+        return sb.toString();
     }
 
     private boolean isFromBot(String from) {

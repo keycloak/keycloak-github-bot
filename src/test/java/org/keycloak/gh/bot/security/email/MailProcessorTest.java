@@ -11,12 +11,14 @@ import org.keycloak.gh.bot.security.common.Constants;
 import org.keycloak.gh.bot.security.common.GitHubAdapter;
 import org.keycloak.gh.bot.utils.Throttler;
 import org.kohsuke.github.GHIssue;
+import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -205,6 +207,101 @@ public class MailProcessorTest {
         mailProcessor.processUnreadEmails();
 
         verify(githubAdapter, never()).updateTitleAndLabels(any(), anyString(), any());
+    }
+
+    @Test
+    public void testCreateNewIssueWithAttachments() throws IOException {
+        String threadId = "thread-attach";
+        Message message = createMockMessage(threadId, "Issue with Attachment", "See attached", "reporter@example.com");
+
+        when(gmailAdapter.fetchUnreadMessages(anyString())).thenReturn(List.of(message));
+        when(gmailAdapter.getMessage(message.getId())).thenReturn(message);
+        when(gmailAdapter.getHeadersMap(message)).thenReturn(Map.of("From", "reporter@example.com", "To", targetGroup, "Subject", "Issue with Attachment"));
+        when(gmailAdapter.getBody(message)).thenReturn("See attached");
+
+        byte[] content = "file-content".getBytes();
+        GmailAdapter.Attachment att = new GmailAdapter.Attachment("log.txt", "text/plain", content);
+        when(gmailAdapter.getAttachments(message)).thenReturn(List.of(att));
+
+        String uploadUrl = "https://github.com/keycloak/keycloak-private/blob/main/attachments/thread-attach/log.txt";
+        when(githubAdapter.uploadFile(threadId, "log.txt", content)).thenReturn(uploadUrl);
+
+        when(githubAdapter.findOpenEmailIssueByThreadId(threadId)).thenReturn(Optional.empty());
+        GHIssue newIssue = mock(GHIssue.class);
+        when(githubAdapter.createSecurityIssue(anyString(), anyString(), anyString())).thenReturn(newIssue);
+
+        mailProcessor.processUnreadEmails();
+
+        verify(githubAdapter).uploadFile(threadId, "log.txt", content);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(githubAdapter).commentOnIssue(eq(newIssue), bodyCaptor.capture());
+
+        String comment = bodyCaptor.getValue();
+        assertTrue(comment.contains(uploadUrl));
+        assertTrue(comment.contains("log.txt"));
+    }
+
+    @Test
+    public void testAttachmentUploadFailureDoesNotBlock() throws IOException {
+        String threadId = "thread-attach-fail";
+        Message message = createMockMessage(threadId, "Issue with Fail", "Body", "reporter@example.com");
+
+        when(gmailAdapter.fetchUnreadMessages(anyString())).thenReturn(List.of(message));
+        when(gmailAdapter.getMessage(message.getId())).thenReturn(message);
+        when(gmailAdapter.getHeadersMap(message)).thenReturn(Map.of("From", "reporter@example.com", "To", targetGroup));
+        when(gmailAdapter.getBody(message)).thenReturn("Body");
+
+        GmailAdapter.Attachment att = new GmailAdapter.Attachment("bad.txt", "text/plain", new byte[0]);
+        when(gmailAdapter.getAttachments(message)).thenReturn(List.of(att));
+
+        when(githubAdapter.uploadFile(anyString(), anyString(), any())).thenThrow(new IOException("Upload failed"));
+
+        GHIssue newIssue = mock(GHIssue.class);
+        when(githubAdapter.createSecurityIssue(anyString(), anyString(), anyString())).thenReturn(newIssue);
+
+        mailProcessor.processUnreadEmails();
+
+        verify(githubAdapter).createSecurityIssue(anyString(), anyString(), anyString());
+        // Verify we still comment even if upload fails, indicating the failure in text
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(githubAdapter).commentOnIssue(eq(newIssue), bodyCaptor.capture());
+        assertTrue(bodyCaptor.getValue().contains("(Upload Failed)"));
+    }
+
+    @Test
+    public void testCommentIncludesSubjectInCorrectOrder() throws IOException {
+        String threadId = "thread-order";
+        String subject = "Specific Subject Line";
+        String from = "reporter@example.com";
+        Message message = createMockMessage(threadId, subject, "Body", from);
+
+        when(gmailAdapter.fetchUnreadMessages(anyString())).thenReturn(List.of(message));
+        when(gmailAdapter.getMessage(message.getId())).thenReturn(message);
+        when(gmailAdapter.getBody(message)).thenReturn("Body");
+        when(gmailAdapter.getHeadersMap(message)).thenReturn(Map.of("From", from, "To", targetGroup, "Subject", subject));
+
+        when(githubAdapter.findOpenEmailIssueByThreadId(threadId)).thenReturn(Optional.empty());
+        GHIssue newIssue = mock(GHIssue.class);
+        when(githubAdapter.createSecurityIssue(anyString(), anyString(), anyString())).thenReturn(newIssue);
+
+        mailProcessor.processUnreadEmails();
+
+        ArgumentCaptor<String> commentCaptor = ArgumentCaptor.forClass(String.class);
+        verify(githubAdapter).commentOnIssue(eq(newIssue), commentCaptor.capture());
+
+        String comment = commentCaptor.getValue();
+        // Verify exact order: ID -> Subject -> From
+        int indexId = comment.indexOf(Constants.GMAIL_THREAD_ID_PREFIX);
+        int indexSubject = comment.indexOf("Subject: " + subject);
+        int indexFrom = comment.indexOf("From: " + from);
+
+        assertTrue(indexId != -1, "Comment missing Thread ID");
+        assertTrue(indexSubject != -1, "Comment missing Subject");
+        assertTrue(indexFrom != -1, "Comment missing From");
+
+        assertTrue(indexId < indexSubject, "Thread ID should come before Subject");
+        assertTrue(indexSubject < indexFrom, "Subject should come before From");
     }
 
     private Message createMockMessage(String threadId, String subject, String body, String from) {
