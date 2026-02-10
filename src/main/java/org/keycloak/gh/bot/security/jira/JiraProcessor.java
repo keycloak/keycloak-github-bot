@@ -52,14 +52,14 @@ public class JiraProcessor {
         if (jiraMatch.isPresent()) {
             JiraAdapter.JiraIssue jiraIssue = jiraMatch.get();
             try {
-                updateGithubIssue(issue, cveId, jiraIssue);
+                updateGithubIssue(issue, jiraIssue);
             } catch (IOException e) {
                 LOG.errorf(e, "Failed to update GitHub issue #%d with Jira data", issue.getNumber());
             }
         }
     }
 
-    private void updateGithubIssue(GHIssue issue, String cveId, JiraAdapter.JiraIssue jiraIssue) throws IOException {
+    private void updateGithubIssue(GHIssue issue, JiraAdapter.JiraIssue jiraIssue) throws IOException {
         String newTitle = parser.parseTitle(jiraIssue.summary());
         String extractedDesc = parser.parseDescription(jiraIssue.description());
 

@@ -50,13 +50,12 @@ public class MailProcessor {
         }
 
         for (Message msgSummary : messages) {
-            if (processMessage(msgSummary)) {
-                throttler.throttle(Duration.ofSeconds(1));
-            }
+            processMessage(msgSummary);
+            throttler.throttle(Duration.ofSeconds(1));
         }
     }
 
-    private boolean processMessage(Message msgSummary) {
+    private void processMessage(Message msgSummary) {
         try {
             Message msg = gmail.getMessage(msgSummary.getId());
             Map<String, String> headers = gmail.getHeadersMap(msg);
@@ -64,7 +63,7 @@ public class MailProcessor {
 
             if (isFromBot(from) || !isValidGroupMessage(headers)) {
                 gmail.markAsRead(msgSummary.getId());
-                return true;
+                return;
             }
 
             String threadId = msg.getThreadId();
@@ -101,10 +100,8 @@ public class MailProcessor {
             }
 
             gmail.markAsRead(msgSummary.getId());
-            return true;
         } catch (Exception e) {
             handleProcessingError(msgSummary.getId(), e);
-            return true;
         }
     }
 

@@ -40,8 +40,9 @@ public class CommandProcessor {
     @Inject CommandParser parser;
     @Inject MailSender mailSender;
 
+    // Prevent duplicate processing
     private final Set<Long> processedComments = Collections.synchronizedSet(Collections.newSetFromMap(
-            new LinkedHashMap<Long, Boolean>(10000 + 1, .75F, true) {
+            new LinkedHashMap<>(10000 + 1, .75F, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<Long, Boolean> eldest) { return size() > 10000; }
             }));
 
@@ -192,7 +193,7 @@ public class CommandProcessor {
         try { github.commentOnIssue(issue, "@" + comment.getUser().getLogin() + "\n" + parser.getHelpMessage()); } catch (IOException e) { LOG.error("Failed help", e); }
     }
 
-    private boolean hasAlreadyProcessed(GHIssueComment comment) throws IOException {
+    private boolean hasAlreadyProcessed(GHIssueComment comment) {
         String botLogin = parser.getBotName();
         for (GHReaction reaction : comment.listReactions()) {
             String user = reaction.getUser().getLogin();

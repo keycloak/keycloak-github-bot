@@ -80,7 +80,7 @@ public class GitHubAdapter {
                 .commit();
     }
 
-    public Optional<GHIssue> findOpenEmailIssueByThreadId(String threadId) throws IOException {
+    public Optional<GHIssue> findOpenEmailIssueByThreadId(String threadId) {
         if (isAccessDenied()) return Optional.empty();
 
         String repoName = gitHubProvider.getRepositoryFullName();

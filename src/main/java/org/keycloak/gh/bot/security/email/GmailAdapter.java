@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.mail.internet.MimeMessage;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -25,6 +26,8 @@ import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class GmailAdapter {
+
+    private static final Logger LOG = Logger.getLogger(GmailAdapter.class);
 
     @Inject
     Gmail gmail;
@@ -112,6 +115,7 @@ public class GmailAdapter {
                     byte[] data = fetchAttachment(messageId, part.getBody().getAttachmentId());
                     attachments.add(new Attachment(part.getFilename(), part.getMimeType(), data));
                 } catch (IOException e) {
+                    LOG.error("Failed to process Gmail operation", e);
                 }
             }
             if (part.getParts() != null) {
