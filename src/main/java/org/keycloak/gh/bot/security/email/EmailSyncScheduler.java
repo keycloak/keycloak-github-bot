@@ -4,6 +4,7 @@ import io.quarkus.scheduler.Scheduled;
 import io.quarkus.scheduler.Scheduled.ConcurrentExecution;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.security.jira.JiraProcessor;
 
@@ -19,21 +20,34 @@ public class EmailSyncScheduler {
     @Inject CommandProcessor commandProcessor;
     @Inject JiraProcessor jiraProcessor;
 
+    @ConfigProperty(name = "bot.security.enabled", defaultValue = "true")
+    boolean securityEnabled;
+
     @Scheduled(every = "${bot.email.sync.interval:10s}", concurrentExecution = ConcurrentExecution.SKIP)
     public void syncGmailToGitHub() {
-        LOG.trace("Syncing Security Emails...");
-        mailProcessor.processUnreadEmails();
+        if (securityEnabled) {
+            LOG.trace("Syncing Security Emails...");
+            mailProcessor.processUnreadEmails();
+        }
     }
 
     @Scheduled(every = "${bot.command.process.interval:10s}", concurrentExecution = ConcurrentExecution.SKIP)
     public void processGitHubCommands() {
-        LOG.trace("Processing Security Commands...");
-        commandProcessor.processCommands();
+        if (securityEnabled) {
+            LOG.trace("Processing Security Commands...");
+            commandProcessor.processCommands();
+        }
     }
 
     @Scheduled(every = "${bot.jira.sync.interval:1h}", concurrentExecution = ConcurrentExecution.SKIP)
     public void syncJiraToGitHub() {
-        LOG.info("Syncing Jira Updates...");
-        jiraProcessor.processJiraUpdates();
+        if (securityEnabled) {
+            LOG.info("Syncing Jira Updates...");
+            jiraProcessor.processJiraUpdates();
+        }
+    }
+
+    void setSecurityEnabled(boolean securityEnabled) {
+        this.securityEnabled = securityEnabled;
     }
 }

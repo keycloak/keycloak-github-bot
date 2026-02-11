@@ -263,7 +263,6 @@ public class MailProcessorTest {
         mailProcessor.processUnreadEmails();
 
         verify(githubAdapter).createSecurityIssue(anyString(), anyString(), anyString());
-        // Verify we still comment even if upload fails, indicating the failure in text
         ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
         verify(githubAdapter).commentOnIssue(eq(newIssue), bodyCaptor.capture());
         assertTrue(bodyCaptor.getValue().contains("(Upload Failed)"));
@@ -291,7 +290,6 @@ public class MailProcessorTest {
         verify(githubAdapter).commentOnIssue(eq(newIssue), commentCaptor.capture());
 
         String comment = commentCaptor.getValue();
-        // Verify exact order: ID -> Subject -> From
         int indexId = comment.indexOf(Constants.GMAIL_THREAD_ID_PREFIX);
         int indexSubject = comment.indexOf("Subject: " + subject);
         int indexFrom = comment.indexOf("From: " + from);
