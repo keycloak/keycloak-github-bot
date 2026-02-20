@@ -9,20 +9,20 @@ import org.kohsuke.github.GHIssue;
 import java.io.IOException;
 
 /**
- * Defines the command-line interface and command handlers for the anxiety42 bot.
+ * Defines the command-line interface and command handlers for the bot.
  */
 @Cli(name = "@anxiety42-bot", defaultCommand = SecurityBotCli.LogCommand.class, commands = { SecurityBotCli.LogCommand.class })
 public class SecurityBotCli {
 
     /**
-     * Interface contract required by Quarkus GitHub App to pass execution context dynamically.
+     * Required by Quarkus GitHub App to pass execution context dynamically.
      */
     public interface BotCommand {
         void run(GHEventPayload.IssueComment issueCommentPayload) throws IOException;
     }
 
     /**
-     * Executes the logging operation using the dynamically injected method parameters.
+     * Executes the logging operation.
      */
     @Command(name = "log", description = "Logs the event payload details upon mention")
     public static class LogCommand implements BotCommand {
