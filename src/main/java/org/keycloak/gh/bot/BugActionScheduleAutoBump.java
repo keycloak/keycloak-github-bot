@@ -2,7 +2,6 @@ package org.keycloak.gh.bot;
 
 import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.Scheduled;
-import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -11,12 +10,14 @@ import org.keycloak.gh.bot.labels.Kind;
 import org.keycloak.gh.bot.labels.Priority;
 import org.keycloak.gh.bot.labels.Status;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.PagedIterator;
 
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 @Startup
 @Singleton
@@ -35,23 +36,23 @@ public class BugActionScheduleAutoBump {
     @Inject
     BugActionMessages messages;
 
-    String rootQuery;
-
-    @PostConstruct
-    public void init() {
-        rootQuery = "repo:" + gitHubProvider.getRepositoryFullName() + " is:issue is:open label:" + Kind.BUG + " label:" + Status.AUTO_EXPIRE;
-    }
-
     @Scheduled(cron = "{autoBump.cron}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void checkIssuesWithLowAndNormalPriority() throws IOException {
-        logger.info("Checking issues with auto-bump");
-        GitHub gitHub = gitHubProvider.getGitHub();
+        logger.info("Checking issues with auto-bump across all installations");
+        Map<GHRepository, GitHub> installations = gitHubProvider.getAllInstalledRepositories();
 
-        bump(gitHub, Priority.LOW, bumpLowReactions, Priority.NORMAL);
-        bump(gitHub, Priority.NORMAL, bumpNormalReactions, Priority.IMPORTANT);
+        for (Map.Entry<GHRepository, GitHub> entry : installations.entrySet()) {
+            GHRepository repository = entry.getKey();
+            GitHub gitHub = entry.getValue();
+
+            String rootQuery = "repo:" + repository.getFullName() + " is:issue is:open label:" + Kind.BUG + " label:" + Status.AUTO_EXPIRE;
+
+            bump(gitHub, rootQuery, Priority.LOW, bumpLowReactions, Priority.NORMAL);
+            bump(gitHub, rootQuery, Priority.NORMAL, bumpNormalReactions, Priority.IMPORTANT);
+        }
     }
 
-    private void bump(GitHub gitHub, Priority currentPriority, int bumpReactions, Priority newPriority) throws IOException {
+    private void bump(GitHub gitHub, String rootQuery, Priority currentPriority, int bumpReactions, Priority newPriority) throws IOException {
         String query = rootQuery + " label:" + currentPriority + " reactions:>=" + bumpReactions;
 
         logger.debugv("Query: {0}", query);
