@@ -53,6 +53,19 @@ public class FlakyJobParserTest {
                 "\tat playground.stianst.github.io.MyOtherFlakyTest.otherFlaky(MyOtherFlakyTest.java:4)", true, 1);
     }
 
+    @Test
+    public void testPlaywrightFlaky() throws IOException {
+        InputStream is = FlakyJobParserTest.class.getResourceAsStream("admin-ui-playwright-report-chromium.zip");
+        FlakyJob flakyJob = FlakyJobParser.parse(is);
+        flakyJob.setWorkflow("Keycloak CI");
+
+        List<FlakyTest> flakyTests = flakyJob.getFlakyTests();
+
+        assertEquals(4, flakyTests.size());
+        assertFlaky(flakyTests.get(0), "user-federation/kerberos.spec.ts", "User Fed Kerberos tests › Edit Kerberos provider › Should edit existing Kerberos provider and cancel",
+                "[[ATTACHMENT|../test-results/user-federation-kerberos-U-710d8-erberos-provider-and-cancel-chromium/error-context.md]]", true, 1);
+    }
+
     private void assertFlaky(FlakyTest flakyTest, String expectedClassName, String expectedMethodName, String expectedFailure, boolean startsWith, int expectedFailureRepeats) throws IOException {
         assertEquals(expectedClassName, flakyTest.getClassName());
         assertEquals(expectedMethodName, flakyTest.getMethodName());
