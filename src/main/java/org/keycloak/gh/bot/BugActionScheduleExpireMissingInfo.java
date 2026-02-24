@@ -33,6 +33,9 @@ public class BugActionScheduleExpireMissingInfo {
     @ConfigProperty(name = "missingInfo.expiration.value")
     private long expirationValue;
 
+    @ConfigProperty(name = "repository.mainRepository")
+    String mainRepository;
+
     private final LastChecked lastChecked = new LastChecked();
 
     @Inject
@@ -43,51 +46,52 @@ public class BugActionScheduleExpireMissingInfo {
 
     @Scheduled(cron = "{missingInfo.cron}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void checkIssuesWithMissingInformation() throws IOException {
-        logger.info("Checking issues with missing information across all installations");
-        Map<GHRepository, GitHub> installations = gitHubProvider.getAllInstalledRepositories();
+        logger.infov("Checking issues with missing information for repository: {0}", mainRepository);
 
-        for (GHRepository repository : installations.keySet()) {
-            PagedIterator<GHIssue> missingInfoItr = repository.queryIssues()
-                    .label(Status.MISSING_INFORMATION.toLabel())
-                    .label(Status.AUTO_EXPIRE.toLabel())
-                    .list().iterator();
+        GitHub gitHub = gitHubProvider.getGitHubClient(mainRepository);
+        GHRepository repository = gitHub.getRepository(mainRepository);
 
-            while (missingInfoItr.hasNext()) {
-                GHIssue issue = missingInfoItr.next();
+        PagedIterator<GHIssue> missingInfoItr = repository.queryIssues()
+                .label(Status.MISSING_INFORMATION.toLabel())
+                .label(Status.AUTO_EXPIRE.toLabel())
+                .list().iterator();
 
-                if (lastChecked.shouldCheck(issue)) {
-                    GHIssueComment lastBotComment = null;
+        while (missingInfoItr.hasNext()) {
+            GHIssue issue = missingInfoItr.next();
 
-                    for (GHIssueComment c : issue.getComments()) {
-                        if (c.getUser().getLogin().equals(gitHubProvider.getBotLogin())) {
-                            if (lastBotComment == null || lastBotComment.getUpdatedAt().before(c.getUpdatedAt())) {
-                                lastBotComment = c;
-                            }
+            if (lastChecked.shouldCheck(issue)) {
+                GHIssueComment lastBotComment = null;
+
+                for (GHIssueComment c : issue.getComments()) {
+                    if (c.getUser().getLogin().equals(gitHubProvider.getBotLogin())) {
+                        if (lastBotComment == null || lastBotComment.getUpdatedAt().before(c.getUpdatedAt())) {
+                            lastBotComment = c;
                         }
                     }
+                }
 
-                    if (lastBotComment == null) {
-                        logger.warnv("Bot comment not found: issue={0} in repo={1}", issue.getNumber(), repository.getFullName());
-                    } else {
-                        lastChecked.checked(issue, lastBotComment);
-                    }
+                if (lastBotComment == null) {
+                    logger.warnv("Bot comment not found: issue={0} in repo={1}", issue.getNumber(), repository.getFullName());
                 } else {
-                    long lastBotComment = lastChecked.getLastBotComment(issue).getTime();
-                    long expires = lastBotComment + expirationUnit.toMillis(expirationValue);
+                    lastChecked.checked(issue, lastBotComment);
+                }
+            } else {
+                long lastBotCommentTime = lastChecked.getLastBotComment(issue).getTime();
+                long expires = lastBotCommentTime + expirationUnit.toMillis(expirationValue);
 
-                    if (System.currentTimeMillis() > expires) {
-                        String comment = messages.getExpireComment(expirationValue, expirationUnit);
-                        issue.comment(comment);
-                        issue.removeLabels(Status.MISSING_INFORMATION.toLabel());
-                        issue.addLabels(Status.EXPIRED_BY_BOT.toLabel());
-                        issue.close(GHIssueStateReason.NOT_PLANNED);
-                        lastChecked.remove(issue);
-                        logger.infov("Expired: issue={0} in repo={1}", issue.getNumber(), repository.getFullName());
-                    }
+                if (System.currentTimeMillis() > expires) {
+                    String comment = messages.getExpireComment(expirationValue, expirationUnit);
+                    issue.comment(comment);
+                    issue.removeLabels(Status.MISSING_INFORMATION.toLabel());
+                    issue.addLabels(Status.EXPIRED_BY_BOT.toLabel());
+                    issue.close(GHIssueStateReason.NOT_PLANNED);
+                    lastChecked.remove(issue);
+                    logger.infov("Expired: issue={0} in repo={1}", issue.getNumber(), repository.getFullName());
                 }
             }
         }
 
+        // Cleans up memory for issues that have been handled or no longer meet the criteria
         lastChecked.clean();
     }
 
@@ -122,7 +126,7 @@ public class BugActionScheduleExpireMissingInfo {
             visited.clear();
 
             if (!lastBotComment.isEmpty()) {
-                logger.infov("Monitoring: {0} cross-repository issues for missing info", lastBotComment.size());
+                logger.infov("Monitoring: {0} issues for missing info", lastBotComment.size());
             }
         }
     }

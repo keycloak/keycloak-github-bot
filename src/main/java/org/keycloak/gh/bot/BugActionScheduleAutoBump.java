@@ -30,6 +30,9 @@ public class BugActionScheduleAutoBump {
     @ConfigProperty(name = "autoBump.normal.reactions")
     int bumpNormalReactions;
 
+    @ConfigProperty(name = "repository.mainRepository")
+    String mainRepository;
+
     @Inject
     GitHubInstallationProvider gitHubProvider;
 
@@ -38,18 +41,13 @@ public class BugActionScheduleAutoBump {
 
     @Scheduled(cron = "{autoBump.cron}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void checkIssuesWithLowAndNormalPriority() throws IOException {
-        logger.info("Checking issues with auto-bump across all installations");
-        Map<GHRepository, GitHub> installations = gitHubProvider.getAllInstalledRepositories();
+        logger.infov("Checking issues with auto-bump for repository: {0}", mainRepository);
 
-        for (Map.Entry<GHRepository, GitHub> entry : installations.entrySet()) {
-            GHRepository repository = entry.getKey();
-            GitHub gitHub = entry.getValue();
+        GitHub gitHub = gitHubProvider.getGitHubClient(mainRepository);
+        String rootQuery = "repo:" + mainRepository + " is:issue is:open label:" + Kind.BUG + " label:" + Status.AUTO_EXPIRE;
 
-            String rootQuery = "repo:" + repository.getFullName() + " is:issue is:open label:" + Kind.BUG + " label:" + Status.AUTO_EXPIRE;
-
-            bump(gitHub, rootQuery, Priority.LOW, bumpLowReactions, Priority.NORMAL);
-            bump(gitHub, rootQuery, Priority.NORMAL, bumpNormalReactions, Priority.IMPORTANT);
-        }
+        bump(gitHub, rootQuery, Priority.LOW, bumpLowReactions, Priority.NORMAL);
+        bump(gitHub, rootQuery, Priority.NORMAL, bumpNormalReactions, Priority.IMPORTANT);
     }
 
     private void bump(GitHub gitHub, String rootQuery, Priority currentPriority, int bumpReactions, Priority newPriority) throws IOException {

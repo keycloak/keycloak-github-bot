@@ -15,9 +15,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Provides application-wide GitHub configuration and dynamically resolves installation contexts.
- */
 @Startup
 @Singleton
 public class GitHubInstallationProvider {
@@ -41,9 +38,6 @@ public class GitHubInstallationProvider {
         return botLogin;
     }
 
-    /**
-     * Resolves all active repositories across all installations.
-     */
     public Map<GHRepository, GitHub> getAllInstalledRepositories() throws IOException {
         Map<GHRepository, GitHub> repositories = new HashMap<>();
         GitHub appClient = gitHubClientProvider.getApplicationClient();
@@ -55,5 +49,24 @@ public class GitHubInstallationProvider {
             }
         }
         return repositories;
+    }
+
+    /**
+     * Fetches the authenticated GitHub client for a specific repository
+     */
+    public GitHub getGitHubClient(String repositoryFullName) throws IOException {
+        int slashIndex = repositoryFullName.indexOf('/');
+
+        if (slashIndex <= 0 || slashIndex == repositoryFullName.length() - 1) {
+            throw new IllegalArgumentException("Invalid repository format. Expected 'owner/repo', got: " + repositoryFullName);
+        }
+
+        String owner = repositoryFullName.substring(0, slashIndex);
+        String repoName = repositoryFullName.substring(slashIndex + 1);
+
+        long installId = gitHubClientProvider.getApplicationClient().getApp()
+                .getInstallationByRepository(owner, repoName).getId();
+
+        return gitHubClientProvider.getInstallationClient(installId);
     }
 }

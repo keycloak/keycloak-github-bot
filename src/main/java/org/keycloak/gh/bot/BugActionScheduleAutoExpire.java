@@ -31,6 +31,9 @@ public class BugActionScheduleAutoExpire {
     @ConfigProperty(name = "autoExpire.normal.expiresDays")
     private long normalPriorityExpiresDays;
 
+    @ConfigProperty(name = "repository.mainRepository")
+    String mainRepository;
+
     @Inject
     GitHubInstallationProvider gitHubProvider;
 
@@ -39,18 +42,13 @@ public class BugActionScheduleAutoExpire {
 
     @Scheduled(cron = "{autoExpire.cron}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void checkIssuesWithLowAndNormalPriority() throws IOException {
-        logger.info("Checking issues with low and normal priority across all installations");
-        Map<GHRepository, GitHub> installations = gitHubProvider.getAllInstalledRepositories();
+        logger.infov("Checking issues with low and normal priority for repository: {0}", mainRepository);
 
-        for (Map.Entry<GHRepository, GitHub> entry : installations.entrySet()) {
-            GHRepository repository = entry.getKey();
-            GitHub gitHub = entry.getValue();
+        GitHub gitHub = gitHubProvider.getGitHubClient(mainRepository);
+        String rootQuery = "repo:" + mainRepository + " is:issue is:open label:" + Kind.BUG.toLabel() + " label:" + Status.AUTO_EXPIRE.toLabel();
 
-            String rootQuery = "repo:" + repository.getFullName() + " is:issue is:open label:" + Kind.BUG.toLabel() + " label:" + Status.AUTO_EXPIRE.toLabel();
-
-            expire(gitHub, rootQuery, Priority.LOW, normalPriorityExpiresDays);
-            expire(gitHub, rootQuery, Priority.NORMAL, normalPriorityExpiresDays);
-        }
+        expire(gitHub, rootQuery, Priority.LOW, normalPriorityExpiresDays);
+        expire(gitHub, rootQuery, Priority.NORMAL, normalPriorityExpiresDays);
     }
 
     private void expire(GitHub gitHub, String rootQuery, Priority priority, long days) throws IOException {
