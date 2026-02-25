@@ -2,7 +2,6 @@ package org.keycloak.gh.bot;
 
 import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.Scheduled;
-import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -13,10 +12,12 @@ import org.keycloak.gh.bot.labels.Status;
 import org.keycloak.gh.bot.utils.DateUtil;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHIssueStateReason;
+import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.PagedIterator;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Startup
@@ -30,29 +31,27 @@ public class BugActionScheduleAutoExpire {
     @ConfigProperty(name = "autoExpire.normal.expiresDays")
     private long normalPriorityExpiresDays;
 
+    @ConfigProperty(name = "repository.mainRepository")
+    String mainRepository;
+
     @Inject
     GitHubInstallationProvider gitHubProvider;
 
     @Inject
     BugActionMessages messages;
 
-    String rootQuery;
-
-    @PostConstruct
-    public void init() {
-        rootQuery = "repo:" + gitHubProvider.getRepositoryFullName() + " is:issue is:open label:" + Kind.BUG.toLabel() + " label:" + Status.AUTO_EXPIRE.toLabel();
-    }
-
     @Scheduled(cron = "{autoExpire.cron}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void checkIssuesWithLowAndNormalPriority() throws IOException {
-        logger.info("Checking issues with low and normal priority");
-        GitHub gitHub = gitHubProvider.getGitHub();
+        logger.infov("Checking issues with low and normal priority for repository: {0}", mainRepository);
 
-        expire(gitHub, Priority.LOW, normalPriorityExpiresDays);
-        expire(gitHub, Priority.NORMAL, normalPriorityExpiresDays);
+        GitHub gitHub = gitHubProvider.getGitHubClient(mainRepository);
+        String rootQuery = "repo:" + mainRepository + " is:issue is:open label:" + Kind.BUG.toLabel() + " label:" + Status.AUTO_EXPIRE.toLabel();
+
+        expire(gitHub, rootQuery, Priority.LOW, normalPriorityExpiresDays);
+        expire(gitHub, rootQuery, Priority.NORMAL, normalPriorityExpiresDays);
     }
 
-    private void expire(GitHub gitHub, Priority priority, long days) throws IOException {
+    private void expire(GitHub gitHub, String rootQuery, Priority priority, long days) throws IOException {
         String query = rootQuery + " label:" + priority + " updated:<" + DateUtil.minusDaysString(lowPriorityExpiresDays);
         String message = messages.getExpireComment(days, TimeUnit.DAYS);
 

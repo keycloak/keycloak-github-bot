@@ -8,49 +8,65 @@ import jakarta.inject.Singleton;
 import org.jboss.logging.Logger;
 import org.kohsuke.github.GHApp;
 import org.kohsuke.github.GHAppInstallation;
+import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @Startup
 @Singleton
 public class GitHubInstallationProvider {
 
-    private static final Logger logger = Logger.getLogger(GitHubInstallationProvider.class);
+    private static final Logger LOG = Logger.getLogger(GitHubInstallationProvider.class);
 
     @Inject
     GitHubClientProvider gitHubClientProvider;
 
-    private long installationId = -1;
-    private String botLogin = null;
-    private String repositoryFullName = null;
+    private String botLogin;
 
     @PostConstruct
-    public void init() throws IOException {
+    public void init() throws java.io.IOException {
         GitHub appClient = gitHubClientProvider.getApplicationClient();
         GHApp app = appClient.getApp();
-
-        GHAppInstallation installation = app.listInstallations().iterator().next();
-        botLogin = app.getSlug() + "[bot]";
-
-        installationId = installation.getId();
-
-        GitHub installationClient = gitHubClientProvider.getInstallationClient(installationId);
-        repositoryFullName = installationClient.getInstallation().listRepositories().iterator().next().getFullName();
-
-        logger.infov("Init: repository={0}, bot={1}, installation={2}", repositoryFullName, botLogin, installationId);
-    }
-
-    public GitHub getGitHub() {
-        return gitHubClientProvider.getInstallationClient(installationId);
-    }
-
-    public String getRepositoryFullName() {
-        return repositoryFullName;
+        this.botLogin = app.getSlug() + "[bot]";
+        LOG.infof("GitHub App Provider initialized globally. Bot Identity: %s", botLogin);
     }
 
     public String getBotLogin() {
         return botLogin;
     }
 
+    public Map<GHRepository, GitHub> getAllInstalledRepositories() throws IOException {
+        Map<GHRepository, GitHub> repositories = new HashMap<>();
+        GitHub appClient = gitHubClientProvider.getApplicationClient();
+
+        for (GHAppInstallation installation : appClient.getApp().listInstallations()) {
+            GitHub installationClient = gitHubClientProvider.getInstallationClient(installation.getId());
+            for (GHRepository repo : installationClient.getInstallation().listRepositories()) {
+                repositories.put(repo, installationClient);
+            }
+        }
+        return repositories;
+    }
+
+    /**
+     * Fetches the authenticated GitHub client for a specific repository
+     */
+    public GitHub getGitHubClient(String repositoryFullName) throws IOException {
+        int slashIndex = repositoryFullName.indexOf('/');
+
+        if (slashIndex <= 0 || slashIndex == repositoryFullName.length() - 1) {
+            throw new IllegalArgumentException("Invalid repository format. Expected 'owner/repo', got: " + repositoryFullName);
+        }
+
+        String owner = repositoryFullName.substring(0, slashIndex);
+        String repoName = repositoryFullName.substring(slashIndex + 1);
+
+        long installId = gitHubClientProvider.getApplicationClient().getApp()
+                .getInstallationByRepository(owner, repoName).getId();
+
+        return gitHubClientProvider.getInstallationClient(installId);
+    }
 }

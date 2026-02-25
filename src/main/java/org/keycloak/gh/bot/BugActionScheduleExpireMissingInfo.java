@@ -21,7 +21,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 @Startup
 @Singleton
@@ -34,6 +33,9 @@ public class BugActionScheduleExpireMissingInfo {
     @ConfigProperty(name = "missingInfo.expiration.value")
     private long expirationValue;
 
+    @ConfigProperty(name = "repository.mainRepository")
+    String mainRepository;
+
     private final LastChecked lastChecked = new LastChecked();
 
     @Inject
@@ -44,12 +46,15 @@ public class BugActionScheduleExpireMissingInfo {
 
     @Scheduled(cron = "{missingInfo.cron}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void checkIssuesWithMissingInformation() throws IOException {
-        logger.info("Checking issues with missing information");
-        GitHub gitHub = gitHubProvider.getGitHub();
+        logger.infov("Checking issues with missing information for repository: {0}", mainRepository);
 
-        GHRepository repository = gitHub.getRepository(gitHubProvider.getRepositoryFullName());
+        GitHub gitHub = gitHubProvider.getGitHubClient(mainRepository);
+        GHRepository repository = gitHub.getRepository(mainRepository);
 
-        PagedIterator<GHIssue> missingInfoItr = repository.queryIssues().label(Status.MISSING_INFORMATION.toLabel()).label(Status.AUTO_EXPIRE.toLabel()).list().iterator();
+        PagedIterator<GHIssue> missingInfoItr = repository.queryIssues()
+                .label(Status.MISSING_INFORMATION.toLabel())
+                .label(Status.AUTO_EXPIRE.toLabel())
+                .list().iterator();
 
         while (missingInfoItr.hasNext()) {
             GHIssue issue = missingInfoItr.next();
@@ -66,13 +71,13 @@ public class BugActionScheduleExpireMissingInfo {
                 }
 
                 if (lastBotComment == null) {
-                    logger.warnv("Bot comment not found: issue={0}", issue.getNumber());
+                    logger.warnv("Bot comment not found: issue={0} in repo={1}", issue.getNumber(), repository.getFullName());
                 } else {
                     lastChecked.checked(issue, lastBotComment);
                 }
             } else {
-                long lastBotComment = lastChecked.getLastBotComment(issue).getTime();
-                long expires = lastBotComment + expirationUnit.toMillis(expirationValue);
+                long lastBotCommentTime = lastChecked.getLastBotComment(issue).getTime();
+                long expires = lastBotCommentTime + expirationUnit.toMillis(expirationValue);
 
                 if (System.currentTimeMillis() > expires) {
                     String comment = messages.getExpireComment(expirationValue, expirationUnit);
@@ -81,50 +86,48 @@ public class BugActionScheduleExpireMissingInfo {
                     issue.addLabels(Status.EXPIRED_BY_BOT.toLabel());
                     issue.close(GHIssueStateReason.NOT_PLANNED);
                     lastChecked.remove(issue);
-                    logger.infov("Expired: issue={0}", issue.getNumber());
+                    logger.infov("Expired: issue={0} in repo={1}", issue.getNumber(), repository.getFullName());
                 }
             }
         }
 
+        // Cleans up memory for issues that have been handled or no longer meet the criteria
         lastChecked.clean();
     }
 
     public class LastChecked {
 
-        Map<Integer, Date> lastBotComment = new HashMap<>();
-
-        Set<Integer> visited = new HashSet<>();
+        Map<Long, Date> lastBotComment = new HashMap<>();
+        Set<Long> visited = new HashSet<>();
 
         public boolean shouldCheck(GHIssue issue) {
-            int issueNumber = issue.getNumber();
-            visited.add(issueNumber);
-            return !lastBotComment.containsKey(issueNumber);
+            long issueId = issue.getId();
+            visited.add(issueId);
+            return !lastBotComment.containsKey(issueId);
         }
 
         public void checked(GHIssue issue, GHIssueComment issueLastBotComment) throws IOException {
-            int issueNumber = issue.getNumber();
-            visited.add(issueNumber);
-            lastBotComment.put(issueNumber, issueLastBotComment.getUpdatedAt());
+            long issueId = issue.getId();
+            visited.add(issueId);
+            lastBotComment.put(issueId, issueLastBotComment.getUpdatedAt());
         }
 
         public void remove(GHIssue issue) {
-            visited.remove(issue.getNumber());
-            lastBotComment.remove(issue.getNumber());
+            visited.remove(issue.getId());
+            lastBotComment.remove(issue.getId());
         }
 
         public Date getLastBotComment(GHIssue issue) {
-            return lastBotComment.get(issue.getNumber());
+            return lastBotComment.get(issue.getId());
         }
 
         public void clean() {
-            lastBotComment.keySet().removeIf(integer -> !visited.contains(integer));
+            lastBotComment.keySet().removeIf(id -> !visited.contains(id));
             visited.clear();
 
             if (!lastBotComment.isEmpty()) {
-                logger.infov("Monitoring: issues={0}", lastBotComment.keySet().stream().map(i -> Integer.toString(i)).collect(Collectors.joining(",")));
+                logger.infov("Monitoring: {0} issues for missing info", lastBotComment.size());
             }
         }
-
     }
-
 }
