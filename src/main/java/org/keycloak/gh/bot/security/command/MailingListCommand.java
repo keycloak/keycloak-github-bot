@@ -3,7 +3,6 @@ package org.keycloak.gh.bot.security.command;
 import com.github.rvesse.airline.annotations.Command;
 import org.jboss.logging.Logger;
 import org.kohsuke.github.GHEventPayload;
-import org.kohsuke.github.ReactionContent;
 
 import java.io.IOException;
 
@@ -15,6 +14,14 @@ public class MailingListCommand extends CommandParser implements BotCommand { //
     @Override
     protected void execute(GHEventPayload.IssueComment payload) throws IOException {
         LOGGER.infof("Replying to the keycloak security: %s", payload.getRepository().getFullName());
-        payload.getComment().createReaction(ReactionContent.PLUS_ONE);
+        ParsedMessage msg = extractMessage(payload);
+        if (msg == null) return;
+
+        if (!msg.commandLine().equals("@security reply")) {
+            fail(payload, "Invalid command signature. Extra text found on the command line.");
+            return;
+        }
+
+        success(payload);
     }
 }
