@@ -15,6 +15,7 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -26,7 +27,7 @@ public class MailProcessor {
     private static final Pattern SIGNATURE_PATTERN = Pattern.compile("(?m)^--\\s*$|^You received this message because you are subscribed.*");
 
     @ConfigProperty(name = "google.group.target")
-    String targetGroup;
+    String targetGroupEmail;
 
     @ConfigProperty(name = "gmail.user.email")
     String botEmail;
@@ -40,11 +41,11 @@ public class MailProcessor {
     @Inject
     GitHubClientProvider gitHubClientProvider;
 
-    private String targetGroupId;
+    private TargetGroup targetGroup;
 
     @PostConstruct
     void init() {
-        this.targetGroupId = targetGroup.split("@")[0];
+        this.targetGroup = TargetGroup.from(targetGroupEmail);
     }
 
     public void processUnreadEmails() {
@@ -81,15 +82,18 @@ public class MailProcessor {
             }
 
             var threadId = msg.getThreadId();
+            var messageId = headers.getOrDefault("Message-ID", "").replaceAll("^<|>$", "");
             var subject = headers.getOrDefault("Subject", "(No Subject)").trim();
             var body = sanitizeBody(gmail.getBody(msg)).orElse("(No content)");
+            var attachments = gmail.getAttachments(msg);
 
+            var attachmentSection = buildAttachmentSection(attachments, messageId);
             var issue = findOpenEmailIssueByThreadId(github, threadId);
 
             if (issue.isPresent()) {
-                appendComment(issue.get(), from, subject, body, threadId);
+                appendComment(issue.get(), from, subject, body, threadId, attachmentSection);
             } else {
-                createNewIssue(repository, threadId, subject, from, body);
+                createNewIssue(repository, threadId, subject, from, body, attachmentSection);
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -110,6 +114,23 @@ public class MailProcessor {
         return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
     }
 
+    private String buildAttachmentSection(List<GmailAdapter.Attachment> attachments, String messageId) {
+        if (attachments.isEmpty()) {
+            return "";
+        }
+
+        var links = new StringBuilder("\n\n**Attachments:**\n");
+        for (var att : attachments) {
+            links.append("- %s\n".formatted(att.fileName()));
+        }
+
+        if (!messageId.isBlank()) {
+            links.append(Constants.ATTACHMENTS_FOOTER.formatted(targetGroup.getArchiveLink(messageId)));
+        }
+
+        return links.toString();
+    }
+
     private void handleProcessingFailure(String messageId, Exception e) {
         var level = (e instanceof GoogleJsonResponseException ge && ge.getStatusCode() >= 400 && ge.getStatusCode() < 500) ? Logger.Level.WARN : Logger.Level.ERROR;
         LOGGER.logf(level, e, "Failure processing message %s. Marking read to prevent retry loop.", messageId);
@@ -120,19 +141,19 @@ public class MailProcessor {
         }
     }
 
-    private void appendComment(GHIssue issue, String from, String subject, String body, String threadId) throws IOException {
-        issue.comment(formatGitHubComment(threadId, from, subject, body));
+    private void appendComment(GHIssue issue, String from, String subject, String body, String threadId, String attachmentSection) throws IOException {
+        issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
     }
 
-    private void createNewIssue(GHRepository repo, String threadId, String subject, String from, String body) throws IOException {
+    private void createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
         var issue = repo.createIssue(subject).body(Constants.ISSUE_DESCRIPTION_TEMPLATE).create();
         issue.addLabels(Labels.STATUS_TRIAGE, Labels.SOURCE_EMAIL);
-        issue.comment(formatGitHubComment(threadId, from, subject, body));
+        issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
     }
 
-    private String formatGitHubComment(String threadId, String from, String subject, String body) {
-        return "%s %s\nSubject: %s\nFrom: %s\n\n%s".formatted(
-                Constants.GMAIL_THREAD_ID_PREFIX, threadId, subject, from, body
+    private String formatGitHubComment(String threadId, String from, String subject, String body, String attachmentSection) {
+        return "%s %s\nSubject: %s\nFrom: %s\n\n%s%s".formatted(
+                Constants.GMAIL_THREAD_ID_PREFIX, threadId, subject, from, body, attachmentSection
         );
     }
 
@@ -141,11 +162,12 @@ public class MailProcessor {
     }
 
     private boolean isValidGroupMessage(Map<String, String> headers) {
-        var listId = headers.get("List-ID");
-        if (listId != null && listId.contains(targetGroupId)) return true;
+        if (targetGroup.matchesListId(headers.get("List-ID"))) {
+            return true;
+        }
         var to = headers.get("To");
         var cc = headers.get("Cc");
-        return (to != null && to.contains(targetGroup)) || (cc != null && cc.contains(targetGroup));
+        return (to != null && to.contains(targetGroup.email())) || (cc != null && cc.contains(targetGroup.email()));
     }
 
     private Optional<String> sanitizeBody(String body) {

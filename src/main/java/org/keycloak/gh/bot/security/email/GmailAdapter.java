@@ -8,7 +8,6 @@ import com.google.api.services.gmail.model.ModifyMessageRequest;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,8 +21,6 @@ import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class GmailAdapter {
-
-    private static final Logger LOGGER = Logger.getLogger(GmailAdapter.class);
 
     @Inject
     Gmail gmail;
@@ -73,22 +70,17 @@ public class GmailAdapter {
             return List.of();
         }
         List<Attachment> attachments = new ArrayList<>();
-        collectAttachments(message.getId(), message.getPayload().getParts(), attachments);
+        collectAttachments(message.getPayload().getParts(), attachments);
         return attachments;
     }
 
-    private void collectAttachments(String messageId, List<MessagePart> parts, List<Attachment> attachments) {
+    private void collectAttachments(List<MessagePart> parts, List<Attachment> attachments) {
         for (var part : parts) {
             if (isAttachment(part)) {
-                try {
-                    var data = fetchAttachment(messageId, part.getBody().getAttachmentId());
-                    attachments.add(new Attachment(part.getFilename(), part.getMimeType(), data));
-                } catch (IOException e) {
-                    LOGGER.errorf(e, "Failed to fetch attachment %s", part.getFilename());
-                }
+                attachments.add(new Attachment(part.getFilename(), part.getMimeType()));
             }
             if (part.getParts() != null) {
-                collectAttachments(messageId, part.getParts(), attachments);
+                collectAttachments(part.getParts(), attachments);
             }
         }
     }
@@ -96,11 +88,6 @@ public class GmailAdapter {
     private boolean isAttachment(MessagePart part) {
         return part.getFilename() != null && !part.getFilename().isBlank()
                 && part.getBody() != null && part.getBody().getAttachmentId() != null;
-    }
-
-    private byte[] fetchAttachment(String messageId, String attachmentId) throws IOException {
-        var attachPart = gmail.users().messages().attachments().get("me", messageId, attachmentId).execute();
-        return Base64.getUrlDecoder().decode(attachPart.getData());
     }
 
     private String getBestContent(List<MessagePart> parts) {
@@ -127,6 +114,6 @@ public class GmailAdapter {
         return new String(Base64.getUrlDecoder().decode(data), StandardCharsets.UTF_8);
     }
 
-    public record Attachment(String fileName, String mimeType, byte[] content) {
+    public record Attachment(String fileName, String mimeType) {
     }
 }
