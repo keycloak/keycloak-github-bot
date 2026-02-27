@@ -2,12 +2,12 @@ package org.keycloak.gh.bot.security.email;
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.services.gmail.model.Message;
-import io.quarkiverse.githubapp.GitHubClientProvider;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.keycloak.gh.bot.GitHubInstallationProvider;
 import org.keycloak.gh.bot.security.common.Constants;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHIssue;
@@ -40,7 +40,7 @@ public class MailProcessor {
     GmailAdapter gmail;
 
     @Inject
-    GitHubClientProvider gitHubClientProvider;
+    GitHubInstallationProvider gitHubInstallationProvider;
 
     private TargetGroup targetGroup;
 
@@ -56,7 +56,7 @@ public class MailProcessor {
         }
 
         try {
-            var github = resolveGitHubClient();
+            var github = gitHubInstallationProvider.getGitHubClient(repositoryName);
             var repository = github.getRepository(repositoryName);
             var query = "is:unread -from:%s".formatted(botEmail);
             var messages = gmail.fetchUnreadMessages(query);
@@ -106,12 +106,6 @@ public class MailProcessor {
         } catch (Exception e) {
             handleProcessingFailure(msgSummary.getId(), e);
         }
-    }
-
-    private GitHub resolveGitHubClient() throws IOException {
-        var appClient = gitHubClientProvider.getApplicationClient();
-        var installationId = appClient.getApp().listInstallations().iterator().next().getId();
-        return gitHubClientProvider.getInstallationClient(installationId);
     }
 
     private Optional<GHIssue> findEmailIssueByThreadId(GitHub github, String threadId) {
