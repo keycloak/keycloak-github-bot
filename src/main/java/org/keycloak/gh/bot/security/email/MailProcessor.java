@@ -133,13 +133,7 @@ public class MailProcessor {
     }
 
     private void handleProcessingFailure(String messageId, Exception e) {
-        var level = (e instanceof GoogleJsonResponseException ge && ge.getStatusCode() >= 400 && ge.getStatusCode() < 500) ? Logger.Level.WARN : Logger.Level.ERROR;
-        LOGGER.logf(level, e, "Failure processing message %s. Marking read to prevent retry loop.", messageId);
-        try {
-            gmail.markAsRead(messageId);
-        } catch (IOException ex) {
-            LOGGER.errorf(ex, "Failed to mark message %s as read.", messageId);
-        }
+        LOGGER.errorf(e, "Failure processing message %s. It will remain unread and be retried.", messageId);
     }
 
     private void appendComment(GHIssue issue, String from, String subject, String body, String threadId, String attachmentSection) throws IOException {
