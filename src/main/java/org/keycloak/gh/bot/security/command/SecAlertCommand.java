@@ -1,6 +1,5 @@
 package org.keycloak.gh.bot.security.command;
 
-import com.github.rvesse.airline.annotations.Arguments;
 import com.github.rvesse.airline.annotations.Command;
 import org.jboss.logging.Logger;
 import org.kohsuke.github.GHEventPayload;
