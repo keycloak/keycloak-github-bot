@@ -15,7 +15,6 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -84,15 +83,13 @@ public class MailProcessor {
             var threadId = msg.getThreadId();
             var subject = headers.getOrDefault("Subject", "(No Subject)").trim();
             var body = sanitizeBody(gmail.getBody(msg)).orElse("(No content)");
-            var attachments = gmail.getAttachments(msg);
 
-            var links = uploadAttachments(repository, threadId, attachments);
             var issue = findOpenEmailIssueByThreadId(github, threadId);
 
             if (issue.isPresent()) {
-                appendComment(issue.get(), from, subject, body, threadId, links);
+                appendComment(issue.get(), from, subject, body, threadId);
             } else {
-                createNewIssue(repository, threadId, subject, from, body, links);
+                createNewIssue(repository, threadId, subject, from, body);
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -113,30 +110,6 @@ public class MailProcessor {
         return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
     }
 
-    private String uploadAttachments(GHRepository repo, String threadId, List<GmailAdapter.Attachment> attachments) {
-        if (attachments.isEmpty()) return "";
-
-        var links = new StringBuilder("\n\nAttachments:");
-        for (var att : attachments) {
-            try {
-                var path = "attachments/%s/%s".formatted(threadId, att.fileName());
-                var message = "Upload attachment %s for thread %s".formatted(att.fileName(), threadId);
-                var url = repo.createContent()
-                        .path(path)
-                        .content(att.content())
-                        .message(message)
-                        .commit()
-                        .getContent()
-                        .getHtmlUrl();
-                links.append("\n- [%s](%s)".formatted(att.fileName(), url));
-            } catch (IOException e) {
-                LOGGER.errorf(e, "Failed to upload attachment %s", att.fileName());
-                links.append("\n- %s (Upload Failed)".formatted(att.fileName()));
-            }
-        }
-        return links.toString();
-    }
-
     private void handleProcessingFailure(String messageId, Exception e) {
         var level = (e instanceof GoogleJsonResponseException ge && ge.getStatusCode() >= 400 && ge.getStatusCode() < 500) ? Logger.Level.WARN : Logger.Level.ERROR;
         LOGGER.logf(level, e, "Failure processing message %s. Marking read to prevent retry loop.", messageId);
@@ -147,19 +120,19 @@ public class MailProcessor {
         }
     }
 
-    private void appendComment(GHIssue issue, String from, String subject, String body, String threadId, String links) throws IOException {
-        issue.comment(formatGitHubComment(threadId, from, subject, body, links));
+    private void appendComment(GHIssue issue, String from, String subject, String body, String threadId) throws IOException {
+        issue.comment(formatGitHubComment(threadId, from, subject, body));
     }
 
-    private void createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String links) throws IOException {
+    private void createNewIssue(GHRepository repo, String threadId, String subject, String from, String body) throws IOException {
         var issue = repo.createIssue(subject).body(Constants.ISSUE_DESCRIPTION_TEMPLATE).create();
         issue.addLabels(Labels.STATUS_TRIAGE, Labels.SOURCE_EMAIL);
-        issue.comment(formatGitHubComment(threadId, from, subject, body, links));
+        issue.comment(formatGitHubComment(threadId, from, subject, body));
     }
 
-    private String formatGitHubComment(String threadId, String from, String subject, String body, String links) {
-        return "%s %s\nSubject: %s\nFrom: %s\n\n%s%s".formatted(
-                Constants.GMAIL_THREAD_ID_PREFIX, threadId, subject, from, body, links
+    private String formatGitHubComment(String threadId, String from, String subject, String body) {
+        return "%s %s\nSubject: %s\nFrom: %s\n\n%s".formatted(
+                Constants.GMAIL_THREAD_ID_PREFIX, threadId, subject, from, body
         );
     }
 
