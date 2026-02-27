@@ -11,6 +11,7 @@ import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.security.common.Constants;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
@@ -60,10 +61,10 @@ public class MailProcessor {
             var query = "is:unread -from:%s".formatted(botEmail);
             var messages = gmail.fetchUnreadMessages(query);
 
-            LOGGER.infof("Email sync triggered. Checking for new messages in %s.", targetGroup);
+            LOGGER.infof("Email sync triggered. Checking for new messages in %s.", targetGroup.email());
             for (var msgSummary : messages) {
                 processSingleMessage(msgSummary, github, repository);
-                LOGGER.infof("Fetching message %s from %s.", msgSummary.getThreadId(), targetGroup);
+                LOGGER.infof("Fetching message %s from %s.", msgSummary.getThreadId(), targetGroup.email());
             }
         } catch (IOException e) {
             LOGGER.error("Failed to synchronize emails with GitHub", e);
@@ -88,10 +89,15 @@ public class MailProcessor {
             var attachments = gmail.getAttachments(msg);
 
             var attachmentSection = buildAttachmentSection(attachments, messageId);
-            var issue = findOpenEmailIssueByThreadId(github, threadId);
+            var issueOpt = findEmailIssueByThreadId(github, threadId);
 
-            if (issue.isPresent()) {
-                appendComment(issue.get(), from, subject, body, threadId, attachmentSection);
+            if (issueOpt.isPresent()) {
+                var issue = issueOpt.get();
+                if (issue.getState() == GHIssueState.CLOSED) {
+                    issue.reopen();
+                    LOGGER.infof("Reopened existing closed issue #%d for thread %s", issue.getNumber(), threadId);
+                }
+                appendComment(issue, from, subject, body, threadId, attachmentSection);
             } else {
                 createNewIssue(repository, threadId, subject, from, body, attachmentSection);
             }
@@ -108,8 +114,9 @@ public class MailProcessor {
         return gitHubClientProvider.getInstallationClient(installationId);
     }
 
-    private Optional<GHIssue> findOpenEmailIssueByThreadId(GitHub github, String threadId) {
-        var query = "repo:%s \"%s\" label:%s is:open is:issue".formatted(repositoryName, threadId, Labels.SOURCE_EMAIL);
+    private Optional<GHIssue> findEmailIssueByThreadId(GitHub github, String threadId) {
+        // Removed "is:open" to ensure we find closed issues belonging to this thread as well
+        var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, threadId, Labels.SOURCE_EMAIL);
         var iterator = github.searchIssues().q(query).list().iterator();
         return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
     }
