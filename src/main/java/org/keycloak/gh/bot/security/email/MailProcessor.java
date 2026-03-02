@@ -2,7 +2,6 @@ package org.keycloak.gh.bot.security.email;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.services.gmail.model.Message;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -22,13 +21,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class MailProcessor {
 
     private static final Logger LOGGER = Logger.getLogger(MailProcessor.class);
-    private static final Pattern SIGNATURE_PATTERN = Pattern.compile("(?m)^--\\s*$|^You received this message because you are subscribed.*");
 
     @ConfigProperty(name = "google.group.target")
     String targetGroupEmail;
@@ -45,9 +42,12 @@ public class MailProcessor {
     @Inject
     GitHubInstallationProvider gitHubInstallationProvider;
 
+    @Inject
+    EmailBodySanitizer bodySanitizer; // Extracted parsing logic dependency
+
     private TargetGroup targetGroup;
 
-    private final Cache<String, GHIssue> issueCache = Caffeine.newBuilder()
+    private final Cache<String, Integer> issueCache = Caffeine.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(Duration.ofHours(1))
             .build();
@@ -99,12 +99,13 @@ public class MailProcessor {
             var threadId = msg.getThreadId();
             var messageId = headers.getOrDefault("Message-ID", "").replaceAll("^<|>$", "");
             var subject = headers.getOrDefault("Subject", "(No Subject)").trim();
-            var body = sanitizeBody(gmail.getBody(msg)).orElse("(No content)");
+
+            var body = bodySanitizer.sanitize(gmail.getBody(msg)).orElse("(No content)");
             var attachments = gmail.getAttachments(msg);
 
             var attachmentSection = buildAttachmentSection(attachments, messageId);
 
-            var issueOpt = resolveIssue(github, threadId);
+            var issueOpt = resolveIssue(github, repository, threadId);
 
             if (issueOpt.isPresent()) {
                 var issue = issueOpt.get();
@@ -115,8 +116,8 @@ public class MailProcessor {
                 appendComment(issue, from, subject, body, threadId, attachmentSection);
             } else {
                 var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
-                // Explicitly cache the newly created issue so subsequent loop iterations instantly find it
-                issueCache.put(threadId, newIssue);
+                issueCache.put(threadId, newIssue.getNumber());
+                LOGGER.infof("Creating new issue #%d for thread %s", newIssue.getNumber(), threadId);
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -125,19 +126,27 @@ public class MailProcessor {
         }
     }
 
-    private Optional<GHIssue> resolveIssue(GitHub github, String threadId) {
-        GHIssue cachedOrFetchedIssue = issueCache.get(threadId, id -> {
+    private Optional<GHIssue> resolveIssue(GitHub github, GHRepository repository, String threadId) {
+        Integer issueNumber = issueCache.get(threadId, id -> {
             try {
                 var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, id, Labels.SOURCE_EMAIL);
                 var iterator = github.searchIssues().q(query).list().iterator();
-                return iterator.hasNext() ? iterator.next() : null;
+                return iterator.hasNext() ? iterator.next().getNumber() : null;
             } catch (Exception e) {
                 LOGGER.warnf(e, "GitHub search failed for thread %s", id);
                 return null;
             }
         });
 
-        return Optional.ofNullable(cachedOrFetchedIssue);
+        if (issueNumber != null) {
+            try {
+                return Optional.ofNullable(repository.getIssue(issueNumber));
+            } catch (IOException e) {
+                LOGGER.warnf(e, "Failed to fetch fresh issue #%d from GitHub", issueNumber);
+            }
+        }
+
+        return Optional.empty();
     }
 
     private String buildAttachmentSection(List<GmailAdapter.Attachment> attachments, String messageId) {
@@ -189,12 +198,5 @@ public class MailProcessor {
         var to = headers.get("To");
         var cc = headers.get("Cc");
         return (to != null && to.contains(targetGroup.email())) || (cc != null && cc.contains(targetGroup.email()));
-    }
-
-    private Optional<String> sanitizeBody(String body) {
-        if (body == null || body.isBlank()) return Optional.empty();
-        var matcher = SIGNATURE_PATTERN.matcher(body);
-        var content = matcher.find() ? body.substring(0, matcher.start()) : body;
-        return content.isBlank() ? Optional.empty() : Optional.of(content.strip());
     }
 }
