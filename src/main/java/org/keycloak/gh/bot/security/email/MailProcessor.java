@@ -1,5 +1,7 @@
 package org.keycloak.gh.bot.security.email;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.services.gmail.model.Message;
 import jakarta.annotation.PostConstruct;
@@ -16,6 +18,7 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,6 +47,11 @@ public class MailProcessor {
 
     private TargetGroup targetGroup;
 
+    private final Cache<String, GHIssue> issueCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(Duration.ofHours(1))
+            .build();
+
     @PostConstruct
     void init() {
         this.targetGroup = TargetGroup.from(targetGroupEmail);
@@ -59,12 +67,18 @@ public class MailProcessor {
             var github = gitHubInstallationProvider.getGitHubClient(repositoryName);
             var repository = github.getRepository(repositoryName);
             var query = "is:unread -from:%s".formatted(botEmail);
+
+            // Gmail returns messages in descending order
             var messages = gmail.fetchUnreadMessages(query);
 
+            // Reverse the list to process chronologically (oldest first)
+            var chronologicalMessages = new java.util.ArrayList<>(messages);
+            java.util.Collections.reverse(chronologicalMessages);
+
             LOGGER.infof("Email sync triggered. Checking for new messages in %s.", targetGroup.email());
-            for (var msgSummary : messages) {
-                processSingleMessage(msgSummary, github, repository);
+            for (var msgSummary : chronologicalMessages) {
                 LOGGER.infof("Fetching message %s from %s.", msgSummary.getThreadId(), targetGroup.email());
+                processSingleMessage(msgSummary, github, repository);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to synchronize emails with GitHub", e);
@@ -89,7 +103,8 @@ public class MailProcessor {
             var attachments = gmail.getAttachments(msg);
 
             var attachmentSection = buildAttachmentSection(attachments, messageId);
-            var issueOpt = findEmailIssueByThreadId(github, threadId);
+
+            var issueOpt = resolveIssue(github, threadId);
 
             if (issueOpt.isPresent()) {
                 var issue = issueOpt.get();
@@ -99,7 +114,9 @@ public class MailProcessor {
                 }
                 appendComment(issue, from, subject, body, threadId, attachmentSection);
             } else {
-                createNewIssue(repository, threadId, subject, from, body, attachmentSection);
+                var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
+                // Explicitly cache the newly created issue so subsequent loop iterations instantly find it
+                issueCache.put(threadId, newIssue);
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -108,11 +125,19 @@ public class MailProcessor {
         }
     }
 
-    private Optional<GHIssue> findEmailIssueByThreadId(GitHub github, String threadId) {
-        // Removed "is:open" to ensure we find closed issues belonging to this thread as well
-        var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, threadId, Labels.SOURCE_EMAIL);
-        var iterator = github.searchIssues().q(query).list().iterator();
-        return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
+    private Optional<GHIssue> resolveIssue(GitHub github, String threadId) {
+        GHIssue cachedOrFetchedIssue = issueCache.get(threadId, id -> {
+            try {
+                var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, id, Labels.SOURCE_EMAIL);
+                var iterator = github.searchIssues().q(query).list().iterator();
+                return iterator.hasNext() ? iterator.next() : null;
+            } catch (Exception e) {
+                LOGGER.warnf(e, "GitHub search failed for thread %s", id);
+                return null;
+            }
+        });
+
+        return Optional.ofNullable(cachedOrFetchedIssue);
     }
 
     private String buildAttachmentSection(List<GmailAdapter.Attachment> attachments, String messageId) {
@@ -140,10 +165,11 @@ public class MailProcessor {
         issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
     }
 
-    private void createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
+    private GHIssue createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
         var issue = repo.createIssue(subject).body(Constants.ISSUE_DESCRIPTION_TEMPLATE).create();
         issue.addLabels(Labels.STATUS_TRIAGE, Labels.SOURCE_EMAIL);
         issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
+        return issue;
     }
 
     private String formatGitHubComment(String threadId, String from, String subject, String body, String attachmentSection) {
