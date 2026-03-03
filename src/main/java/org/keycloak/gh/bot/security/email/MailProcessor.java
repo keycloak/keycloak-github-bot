@@ -1,6 +1,7 @@
 package org.keycloak.gh.bot.security.email;
 
-import com.google.api.client.googleapis.json.GoogleJsonResponseException;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.api.services.gmail.model.Message;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -16,16 +17,15 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class MailProcessor {
 
     private static final Logger LOGGER = Logger.getLogger(MailProcessor.class);
-    private static final Pattern SIGNATURE_PATTERN = Pattern.compile("(?m)^--\\s*$|^You received this message because you are subscribed.*");
 
     @ConfigProperty(name = "google.group.target")
     String targetGroupEmail;
@@ -42,7 +42,15 @@ public class MailProcessor {
     @Inject
     GitHubInstallationProvider gitHubInstallationProvider;
 
+    @Inject
+    EmailBodySanitizer bodySanitizer; // Extracted parsing logic dependency
+
     private TargetGroup targetGroup;
+
+    private final Cache<String, Integer> issueCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(Duration.ofDays(7))
+            .build();
 
     @PostConstruct
     void init() {
@@ -59,12 +67,18 @@ public class MailProcessor {
             var github = gitHubInstallationProvider.getGitHubClient(repositoryName);
             var repository = github.getRepository(repositoryName);
             var query = "is:unread -from:%s".formatted(botEmail);
+
+            // Gmail returns messages in descending order
             var messages = gmail.fetchUnreadMessages(query);
 
+            // Reverse the list to process chronologically (oldest first)
+            var chronologicalMessages = new java.util.ArrayList<>(messages);
+            java.util.Collections.reverse(chronologicalMessages);
+
             LOGGER.infof("Email sync triggered. Checking for new messages in %s.", targetGroup.email());
-            for (var msgSummary : messages) {
-                processSingleMessage(msgSummary, github, repository);
+            for (var msgSummary : chronologicalMessages) {
                 LOGGER.infof("Fetching message %s from %s.", msgSummary.getThreadId(), targetGroup.email());
+                processSingleMessage(msgSummary, github, repository);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to synchronize emails with GitHub", e);
@@ -85,11 +99,13 @@ public class MailProcessor {
             var threadId = msg.getThreadId();
             var messageId = headers.getOrDefault("Message-ID", "").replaceAll("^<|>$", "");
             var subject = headers.getOrDefault("Subject", "(No Subject)").trim();
-            var body = sanitizeBody(gmail.getBody(msg)).orElse("(No content)");
+
+            var body = bodySanitizer.sanitize(gmail.getBody(msg)).orElse("(No content)");
             var attachments = gmail.getAttachments(msg);
 
             var attachmentSection = buildAttachmentSection(attachments, messageId);
-            var issueOpt = findEmailIssueByThreadId(github, threadId);
+
+            var issueOpt = resolveIssue(github, repository, threadId);
 
             if (issueOpt.isPresent()) {
                 var issue = issueOpt.get();
@@ -99,7 +115,9 @@ public class MailProcessor {
                 }
                 appendComment(issue, from, subject, body, threadId, attachmentSection);
             } else {
-                createNewIssue(repository, threadId, subject, from, body, attachmentSection);
+                var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
+                issueCache.put(threadId, newIssue.getNumber());
+                LOGGER.infof("Creating new issue #%d for thread %s", newIssue.getNumber(), threadId);
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -108,11 +126,27 @@ public class MailProcessor {
         }
     }
 
-    private Optional<GHIssue> findEmailIssueByThreadId(GitHub github, String threadId) {
-        // Removed "is:open" to ensure we find closed issues belonging to this thread as well
-        var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, threadId, Labels.SOURCE_EMAIL);
-        var iterator = github.searchIssues().q(query).list().iterator();
-        return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
+    private Optional<GHIssue> resolveIssue(GitHub github, GHRepository repository, String threadId) {
+        Integer issueNumber = issueCache.get(threadId, id -> {
+            try {
+                var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, id, Labels.SOURCE_EMAIL);
+                var iterator = github.searchIssues().q(query).list().iterator();
+                return iterator.hasNext() ? iterator.next().getNumber() : null;
+            } catch (Exception e) {
+                LOGGER.warnf(e, "GitHub search failed for thread %s", id);
+                return null;
+            }
+        });
+
+        if (issueNumber != null) {
+            try {
+                return Optional.ofNullable(repository.getIssue(issueNumber));
+            } catch (IOException e) {
+                LOGGER.warnf(e, "Failed to fetch fresh issue #%d from GitHub", issueNumber);
+            }
+        }
+
+        return Optional.empty();
     }
 
     private String buildAttachmentSection(List<GmailAdapter.Attachment> attachments, String messageId) {
@@ -140,10 +174,11 @@ public class MailProcessor {
         issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
     }
 
-    private void createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
+    private GHIssue createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
         var issue = repo.createIssue(subject).body(Constants.ISSUE_DESCRIPTION_TEMPLATE).create();
         issue.addLabels(Labels.STATUS_TRIAGE, Labels.SOURCE_EMAIL);
         issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
+        return issue;
     }
 
     private String formatGitHubComment(String threadId, String from, String subject, String body, String attachmentSection) {
@@ -163,12 +198,5 @@ public class MailProcessor {
         var to = headers.get("To");
         var cc = headers.get("Cc");
         return (to != null && to.contains(targetGroup.email())) || (cc != null && cc.contains(targetGroup.email()));
-    }
-
-    private Optional<String> sanitizeBody(String body) {
-        if (body == null || body.isBlank()) return Optional.empty();
-        var matcher = SIGNATURE_PATTERN.matcher(body);
-        var content = matcher.find() ? body.substring(0, matcher.start()) : body;
-        return content.isBlank() ? Optional.empty() : Optional.of(content.strip());
     }
 }

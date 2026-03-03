@@ -80,6 +80,10 @@
             <version>2.0.3</version>
         </dependency>
         <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.quarkiverse.githubapp</groupId>
             <artifactId>quarkus-github-app-testing</artifactId>
             <version>${quarkus-github-app.version}</version>
