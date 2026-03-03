@@ -3,7 +3,9 @@ package org.keycloak.gh.bot.security.email;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-/** Encapsulates the Google Group identity, structural validation, and URL generation. */
+/**
+ * Encapsulates the Google Group identity, structural validation, and URL generation.
+ */
 public record TargetGroup(String email, String id, String domain) {
 
     public static TargetGroup from(String emailAddress) {
