@@ -49,7 +49,7 @@ public class MailProcessor {
 
     private final Cache<String, Integer> issueCache = Caffeine.newBuilder()
             .maximumSize(1000)
-            .expireAfterWrite(Duration.ofHours(1))
+            .expireAfterWrite(Duration.ofDays(7))
             .build();
 
     @PostConstruct
