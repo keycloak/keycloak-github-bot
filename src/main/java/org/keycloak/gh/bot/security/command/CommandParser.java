@@ -45,6 +45,7 @@ public abstract class CommandParser implements BotCommand {
     protected void success(GHEventPayload.IssueComment payload) throws IOException {
         payload.getComment().createReaction(ReactionContent.PLUS_ONE);
     }
+
     protected void fail(GHEventPayload.IssueComment payload, String reason) throws IOException {
         LOGGER.errorf("Execution aborted: %s", reason);
         payload.getComment().createReaction(ReactionContent.MINUS_ONE);
