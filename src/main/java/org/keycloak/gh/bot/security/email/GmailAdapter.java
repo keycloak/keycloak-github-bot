@@ -7,8 +7,11 @@ import com.google.api.services.gmail.model.MessagePartHeader;
 import com.google.api.services.gmail.model.ModifyMessageRequest;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -36,6 +39,26 @@ public class GmailAdapter {
 
     public Message getMessage(String id) throws IOException {
         return gmail.users().messages().get("me", id).execute();
+    }
+
+    public com.google.api.services.gmail.model.Thread getThread(String threadId) throws IOException {
+        return gmail.users().threads().get("me", threadId).setFormat("METADATA").execute();
+    }
+
+    public Message sendMessage(String threadId, MimeMessage email) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        try {
+            email.writeTo(buffer);
+        } catch (MessagingException e) {
+            throw new IOException("Failed to serialize MimeMessage", e);
+        }
+
+        String encodedEmail = Base64.getUrlEncoder().withoutPadding().encodeToString(buffer.toByteArray());
+        Message message = new Message().setRaw(encodedEmail);
+        if (threadId != null) {
+            message.setThreadId(threadId);
+        }
+        return gmail.users().messages().send("me", message).execute();
     }
 
     public void markAsRead(String messageId) throws IOException {
