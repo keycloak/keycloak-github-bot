@@ -4,15 +4,22 @@ import com.github.rvesse.airline.annotations.Arguments;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 import org.kohsuke.github.GHEventPayload;
+import org.kohsuke.github.GHIssueComment;
 import org.kohsuke.github.ReactionContent;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public abstract class CommandParser implements BotCommand {
 
     private static final Logger LOGGER = Logger.getLogger(CommandParser.class);
+    private static final Set<String> ACTIVE_COMMANDS = ConcurrentHashMap.newKeySet();
 
     // Absorbs all invalid trailing text to prevent parser crashes
     @Arguments
@@ -20,9 +27,26 @@ public abstract class CommandParser implements BotCommand {
 
     @Override
     public final void run(GHEventPayload.IssueComment issueCommentPayload) throws IOException {
-        if (isAuthorizedRepository(issueCommentPayload)) {
-            execute(issueCommentPayload);
+        if (!isAuthorizedRepository(issueCommentPayload)) {
+            return;
         }
+
+        String commandKey = buildCommandKey(issueCommentPayload);
+        if (!ACTIVE_COMMANDS.add(commandKey)) {
+            LOGGER.infof("Duplicate webhook detected for %s. Skipping.", commandKey);
+            return;
+        }
+
+        try {
+            execute(issueCommentPayload);
+        } finally {
+            ACTIVE_COMMANDS.remove(commandKey);
+        }
+    }
+
+    private String buildCommandKey(GHEventPayload.IssueComment payload) {
+        return getClass().getSimpleName()
+                + ":" + payload.getComment().getNodeId();
     }
 
     private boolean isAuthorizedRepository(GHEventPayload.IssueComment payload) {
@@ -54,17 +78,42 @@ public abstract class CommandParser implements BotCommand {
     /**
      * Ensure that a body exists and is placed on a new line.
      */
-    protected ParsedMessage extractMessage(GHEventPayload.IssueComment payload) throws IOException {
-        String[] parts = payload.getComment().getBody().trim().split("[\\r\\n]+", 2);
-
-        if (parts.length < 2 || parts[1].trim().isEmpty()) {
-            fail(payload, parts.length < 2
-                    ? "Invalid formatting. The message body MUST be placed on a new line below the command."
-                    : "Empty message body provided.");
-            return null;
+    protected Optional<ParsedMessage> extractMessage(GHEventPayload.IssueComment payload) throws IOException {
+        String commentBody = payload.getComment().getBody();
+        if (commentBody == null || commentBody.isBlank()) {
+            fail(payload, "Empty comment body.");
+            return Optional.empty();
         }
 
-        return new ParsedMessage(parts[0].trim().replaceAll("\\s+", " ").toLowerCase(), parts[1].trim());
+        int newlineIndex = commentBody.indexOf('\n');
+        if (newlineIndex == -1) {
+            fail(payload, "Invalid formatting. The message body MUST be placed on a new line below the command.");
+            return Optional.empty();
+        }
+
+        String rawCommand = commentBody.substring(0, newlineIndex);
+        String commandLine = rawCommand.trim().replaceAll("\\s+", " ");
+        String body = commentBody.substring(newlineIndex + 1).trim();
+
+        if (body.isEmpty()) {
+            fail(payload, "Empty message body provided.");
+            return Optional.empty();
+        }
+
+        return Optional.of(new ParsedMessage(commandLine, body));
+    }
+
+    protected Optional<String> findThreadId(GHEventPayload.IssueComment payload, Pattern pattern) throws IOException {
+        for (GHIssueComment comment : payload.getIssue().queryComments().list()) {
+            String body = comment.getBody();
+            if (body == null) continue;
+
+            Matcher matcher = pattern.matcher(body);
+            if (matcher.find()) {
+                return Optional.of(matcher.group(1));
+            }
+        }
+        return Optional.empty();
     }
 
     protected record ParsedMessage(String commandLine, String body) {

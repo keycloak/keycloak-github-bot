@@ -1,26 +1,96 @@
 package org.keycloak.gh.bot.security.command;
 
 import com.github.rvesse.airline.annotations.Command;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.keycloak.gh.bot.labels.Status;
+import org.keycloak.gh.bot.security.common.Constants;
+import org.keycloak.gh.bot.security.email.MailSender;
 import org.kohsuke.github.GHEventPayload;
+import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHLabel;
 
 import java.io.IOException;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-@Command(name = "secalert", description = "Handles security alerts and multiline replies")
-public class SecAlertCommand extends CommandParser implements BotCommand { //Required due to a bug on Airline
+/**
+ * Sends emails to SecAlert. Creates a new thread when no SecAlert-Thread-ID exists, otherwise replies on the existing thread.
+ */
+@Command(name = "secalert", description = "Sends a new email or reply to SecAlert and tracks the thread ID")
+public class SecAlertCommand extends CommandParser implements BotCommand {
 
     private static final Logger LOGGER = Logger.getLogger(SecAlertCommand.class);
+    private static final Pattern SECALERT_THREAD_ID_PATTERN = Pattern.compile(
+            Pattern.quote(Constants.SECALERT_THREAD_ID_PREFIX) + "\\s*([a-f0-9]+)");
+
+    @Inject
+    MailSender mailSender;
+
+    @ConfigProperty(name = "email.sender.secalert")
+    String secAlertEmail;
+
+    @ConfigProperty(name = "google.group.target")
+    String targetGroup;
 
     @Override
     protected void execute(GHEventPayload.IssueComment payload) throws IOException {
-        ParsedMessage msg = extractMessage(payload);
-        if (msg == null) return;
+        Optional<ParsedMessage> msg = extractMessage(payload);
+        if (msg.isEmpty()) return;
 
-        if (msg.commandLine().equals("@security secalert")) {
-            LOGGER.infof("New Message to secalert:\n%s", msg.body());
+        String subject = String.join(" ", unparsedArgs);
+        String body = msg.get().body();
+
+        Optional<String> existingThreadId = findThreadId(payload, SECALERT_THREAD_ID_PATTERN);
+
+        if (existingThreadId.isPresent()) {
+            replyToExistingThread(payload, existingThreadId.get(), body);
+        } else {
+            createNewThread(payload, subject, body);
+        }
+    }
+
+    private void createNewThread(GHEventPayload.IssueComment payload, String subject, String body) throws IOException {
+        if (subject.isEmpty()) {
+            fail(payload, "Subject is required for the first SecAlert email. Usage: @security secalert <subject>");
+            return;
+        }
+
+        LOGGER.infof("Sending new SecAlert email for issue #%d, subject: %s", payload.getIssue().getNumber(), subject);
+
+        Optional<String> threadId = mailSender.sendNewEmail(secAlertEmail, targetGroup, subject, body);
+        if (threadId.isEmpty()) {
+            fail(payload, "Failed to send email to SecAlert via Gmail API.");
+            return;
+        }
+
+        String marker = Constants.SECALERT_THREAD_ID_PREFIX + " " + threadId.get();
+        GHIssue issue = payload.getIssue();
+        issue.comment("SecAlert email sent. " + marker);
+
+        Set<String> currentLabels = issue.getLabels().stream().map(GHLabel::getName).collect(Collectors.toSet());
+        if (currentLabels.contains(Status.TRIAGE.toLabel())) {
+            issue.removeLabels(Status.TRIAGE.toLabel());
+        }
+        issue.addLabels(Status.CVE_REQUEST.toLabel());
+
+        String title = issue.getTitle();
+        if (!title.startsWith(Constants.CVE_TBD_PREFIX)) {
+            issue.setTitle(Constants.CVE_TBD_PREFIX + " " + title);
+        }
+        success(payload);
+    }
+
+    private void replyToExistingThread(GHEventPayload.IssueComment payload, String threadId, String body) throws IOException {
+        LOGGER.infof("Replying to existing SecAlert thread %s for issue #%d", threadId, payload.getIssue().getNumber());
+
+        if (mailSender.sendThreadedEmail(threadId, secAlertEmail, targetGroup, body)) {
             success(payload);
         } else {
-            fail(payload, "Invalid command. Extra text found on the command line.");
+            fail(payload, "Failed to send reply to SecAlert thread " + threadId + ".");
         }
     }
 }
