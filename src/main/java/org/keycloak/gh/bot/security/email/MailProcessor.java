@@ -21,11 +21,14 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class MailProcessor {
 
     private static final Logger LOGGER = Logger.getLogger(MailProcessor.class);
+    private static final Pattern BRACKET_PREFIX_PATTERN = Pattern.compile("^.*?\\[.*?]\\s*");
+    private static final Pattern REPLY_PREFIX_PATTERN = Pattern.compile("^(?:\\s*(?:Re|Fwd|Fw)\\s*:\\s*)+", Pattern.CASE_INSENSITIVE);
 
     @ConfigProperty(name = "google.group.target")
     String targetGroupEmail;
@@ -98,7 +101,7 @@ public class MailProcessor {
 
             var threadId = msg.getThreadId();
             var messageId = headers.getOrDefault("Message-ID", "").replaceAll("^<|>$", "");
-            var subject = headers.getOrDefault("Subject", "(No Subject)").trim();
+            var subject = normalizeSubject(headers.getOrDefault("Subject", "(No Subject)").trim());
 
             var body = bodySanitizer.sanitize(gmail.getBody(msg)).orElse("(No content)");
             var attachments = gmail.getAttachments(msg);
@@ -113,7 +116,7 @@ public class MailProcessor {
                     issue.reopen();
                     LOGGER.infof("Reopened existing closed issue #%d for thread %s", issue.getNumber(), threadId);
                 }
-                appendComment(issue, from, subject, body, threadId, attachmentSection);
+                appendComment(issue, from, body, attachmentSection);
             } else {
                 var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
                 issueCache.put(threadId, newIssue.getNumber());
@@ -129,7 +132,7 @@ public class MailProcessor {
     private Optional<GHIssue> resolveIssue(GitHub github, GHRepository repository, String threadId) {
         Integer issueNumber = issueCache.get(threadId, id -> {
             try {
-                var query = "repo:%s \"%s\" label:%s is:issue".formatted(repositoryName, id, Labels.SOURCE_EMAIL);
+                var query = "repo:%s \"%s\" label:%s is:issue in:comments".formatted(repositoryName, id, Labels.SOURCE_EMAIL);
                 var iterator = github.searchIssues().q(query).list().iterator();
                 return iterator.hasNext() ? iterator.next().getNumber() : null;
             } catch (Exception e) {
@@ -170,21 +173,30 @@ public class MailProcessor {
         LOGGER.errorf(e, "Failure processing message %s. It will remain unread and be retried.", messageId);
     }
 
-    private void appendComment(GHIssue issue, String from, String subject, String body, String threadId, String attachmentSection) throws IOException {
-        issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
+    private void appendComment(GHIssue issue, String from, String body, String attachmentSection) throws IOException {
+        issue.comment(formatReplyComment(from, body, attachmentSection));
     }
 
     private GHIssue createNewIssue(GHRepository repo, String threadId, String subject, String from, String body, String attachmentSection) throws IOException {
         var issue = repo.createIssue(subject).body(Constants.ISSUE_DESCRIPTION_TEMPLATE).create();
         issue.addLabels(Labels.STATUS_TRIAGE, Labels.SOURCE_EMAIL);
-        issue.comment(formatGitHubComment(threadId, from, subject, body, attachmentSection));
+        issue.comment(formatNewIssueComment(threadId, subject, from, body, attachmentSection));
         return issue;
     }
 
-    private String formatGitHubComment(String threadId, String from, String subject, String body, String attachmentSection) {
-        return "%s %s\nSubject: %s\nFrom: %s\n\n%s%s".formatted(
+    static String formatNewIssueComment(String threadId, String subject, String from, String body, String attachmentSection) {
+        return "%s %s\nSubject: %s\nFrom: %s\n\n---\n\n%s%s".formatted(
                 Constants.GMAIL_THREAD_ID_PREFIX, threadId, subject, from, body, attachmentSection
         );
+    }
+
+    static String formatReplyComment(String from, String body, String attachmentSection) {
+        return "From: %s\n\n---\n\n%s%s".formatted(from, body, attachmentSection);
+    }
+
+    static String normalizeSubject(String subject) {
+        String result = BRACKET_PREFIX_PATTERN.matcher(subject).replaceFirst("");
+        return REPLY_PREFIX_PATTERN.matcher(result).replaceFirst("");
     }
 
     private boolean isFromBot(String from) {
