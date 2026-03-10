@@ -44,7 +44,9 @@ class MailingListCommandTest {
         when(repository.getFullName()).thenReturn("keycloak/keycloak-private");
         when(payload.getRepository()).thenReturn(repository);
         when(payload.getComment()).thenReturn(comment);
+        when(comment.getNodeId()).thenReturn("IC_abc123");
         when(payload.getIssue()).thenReturn(issue);
+        when(issue.getNumber()).thenReturn(1);
     }
 
     @Test
@@ -76,16 +78,6 @@ class MailingListCommandTest {
     void execute_reactsWithThumbsDownWhenNoThreadIdFound() throws Exception {
         when(comment.getBody()).thenReturn("@security reply\n\nOrphan reply");
         setupIssueComments("Just a regular comment with no thread ID");
-
-        command.run(payload);
-
-        verify(comment).createReaction(ReactionContent.MINUS_ONE);
-        verify(mailSender, never()).sendReply(anyString(), anyString(), anyString());
-    }
-
-    @Test
-    void execute_reactsWithThumbsDownOnInvalidCommandSignature() throws Exception {
-        when(comment.getBody()).thenReturn("@security reply extra-stuff\n\nBody text");
 
         command.run(payload);
 

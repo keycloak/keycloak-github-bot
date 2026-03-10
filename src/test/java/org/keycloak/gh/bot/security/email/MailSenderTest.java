@@ -14,6 +14,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,6 +34,72 @@ class MailSenderTest {
         setField(mailSender, "gmail", gmail);
         setField(mailSender, "botEmail", "bot@example.com");
         mailSender.init();
+    }
+
+    @Test
+    void sendNewEmail_sendsAndReturnsThreadId() throws Exception {
+        Message sentMessage = new Message().setThreadId("newthread123");
+        when(gmail.sendMessage(isNull(), any(MimeMessage.class))).thenReturn(sentMessage);
+
+        Optional<String> threadId = mailSender.sendNewEmail("secalert@redhat.com", "group@example.com", "CVE-2026-999", "Details");
+
+        assertEquals("newthread123", threadId.orElseThrow());
+
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(gmail).sendMessage(isNull(), captor.capture());
+
+        MimeMessage sent = captor.getValue();
+        assertEquals("CVE-2026-999", sent.getSubject());
+        assertTrue(sent.getRecipients(jakarta.mail.Message.RecipientType.TO)[0].toString().contains("secalert@redhat.com"));
+        assertTrue(sent.getRecipients(jakarta.mail.Message.RecipientType.CC)[0].toString().contains("group@example.com"));
+    }
+
+    @Test
+    void sendNewEmail_returnsEmptyWhenSendFails() throws Exception {
+        when(gmail.sendMessage(isNull(), any(MimeMessage.class))).thenThrow(new IOException("API error"));
+
+        Optional<String> threadId = mailSender.sendNewEmail("secalert@redhat.com", null, "Subject", "Body");
+
+        assertTrue(threadId.isEmpty());
+    }
+
+    @Test
+    void sendNewEmail_returnsEmptyWhenNoThreadId() throws Exception {
+        Message sentMessage = new Message();
+        when(gmail.sendMessage(isNull(), any(MimeMessage.class))).thenReturn(sentMessage);
+
+        Optional<String> threadId = mailSender.sendNewEmail("secalert@redhat.com", "group@example.com", "Subject", "Body");
+
+        assertTrue(threadId.isEmpty());
+    }
+
+    @Test
+    void sendThreadedEmail_repliesToExistingThread() throws Exception {
+        Message existingMsg = message("secalert@redhat.com", "<orig@mail.com>", null, "CVE-2026-999");
+        Thread thread = new Thread().setMessages(List.of(existingMsg));
+
+        when(gmail.getThread("thread-secalert")).thenReturn(thread);
+        when(gmail.getHeadersMap(existingMsg)).thenReturn(headers("secalert@redhat.com", "<orig@mail.com>", null, "CVE-2026-999"));
+        when(gmail.sendMessage(eq("thread-secalert"), any(MimeMessage.class))).thenReturn(new Message());
+
+        assertTrue(mailSender.sendThreadedEmail("thread-secalert", "secalert@redhat.com", "group@example.com", "Follow-up info"));
+
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(gmail).sendMessage(eq("thread-secalert"), captor.capture());
+
+        MimeMessage sent = captor.getValue();
+        assertEquals("Re: CVE-2026-999", sent.getSubject());
+        assertEquals("<orig@mail.com>", sent.getHeader("In-Reply-To")[0]);
+        assertTrue(sent.getRecipients(jakarta.mail.Message.RecipientType.TO)[0].toString().contains("secalert@redhat.com"));
+        assertTrue(sent.getRecipients(jakarta.mail.Message.RecipientType.CC)[0].toString().contains("group@example.com"));
+    }
+
+    @Test
+    void sendThreadedEmail_returnsFalseWhenThreadIsNull() throws Exception {
+        when(gmail.getThread("bad")).thenReturn(null);
+
+        assertFalse(mailSender.sendThreadedEmail("bad", "to@example.com", null, "Body"));
+        verify(gmail, never()).sendMessage(anyString(), any(MimeMessage.class));
     }
 
     @Test
