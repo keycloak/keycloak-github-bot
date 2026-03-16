@@ -9,10 +9,13 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.GitHubInstallationProvider;
+import org.keycloak.gh.bot.labels.Kind;
+import org.keycloak.gh.bot.labels.Status;
 import org.keycloak.gh.bot.security.common.Constants;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHIssueState;
+import org.kohsuke.github.GHLabel;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 
@@ -21,6 +24,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @ApplicationScoped
@@ -38,6 +42,9 @@ public class MailProcessor {
 
     @ConfigProperty(name = "repository.privateRepository")
     String repositoryName;
+
+    @ConfigProperty(name = "email.sender.secalert")
+    String secAlertEmail;
 
     @Inject
     GmailAdapter gmail;
@@ -110,6 +117,10 @@ public class MailProcessor {
 
             var issueOpt = resolveIssue(github, repository, threadId);
 
+            if (issueOpt.isEmpty() && isFromSecAlert(from)) {
+                issueOpt = resolveIssueBySecAlertThread(github, repository, threadId);
+            }
+
             if (issueOpt.isPresent()) {
                 var issue = issueOpt.get();
                 if (issue.getState() == GHIssueState.CLOSED) {
@@ -117,6 +128,10 @@ public class MailProcessor {
                     LOGGER.infof("Reopened existing closed issue #%d for thread %s", issue.getNumber(), threadId);
                 }
                 appendComment(issue, from, body, attachmentSection);
+
+                if (isFromSecAlert(from)) {
+                    applyCveIdFromSecAlert(issue, subject, body);
+                }
             } else {
                 var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
                 issueCache.put(threadId, newIssue.getNumber());
@@ -201,6 +216,60 @@ public class MailProcessor {
 
     private boolean isFromBot(String from) {
         return from != null && from.toLowerCase().contains(botEmail.toLowerCase());
+    }
+
+    private boolean isFromSecAlert(String from) {
+        return from != null && from.toLowerCase().contains(secAlertEmail.toLowerCase());
+    }
+
+    private Optional<GHIssue> resolveIssueBySecAlertThread(GitHub github, GHRepository repository, String threadId) {
+        try {
+            var query = "repo:%s \"%s %s\" is:issue in:comments".formatted(
+                    repositoryName, Constants.SECALERT_THREAD_ID_PREFIX, threadId);
+            var iterator = github.searchIssues().q(query).list().iterator();
+            if (iterator.hasNext()) {
+                int issueNumber = iterator.next().getNumber();
+                return Optional.ofNullable(repository.getIssue(issueNumber));
+            }
+        } catch (Exception e) {
+            LOGGER.warnf(e, "GitHub search failed for SecAlert thread %s", threadId);
+        }
+        return Optional.empty();
+    }
+
+    void applyCveIdFromSecAlert(GHIssue issue, String subject, String body) throws IOException {
+        String cveId = extractCveId(subject);
+        if (cveId == null) {
+            cveId = extractCveId(body);
+        }
+        if (cveId == null) return;
+
+        String title = issue.getTitle();
+        if (title != null && title.startsWith(Constants.CVE_TBD_PREFIX)) {
+            String newTitle = title.replace(Constants.CVE_TBD_PREFIX, "[" + cveId + "]");
+            issue.setTitle(newTitle);
+            LOGGER.infof("Replaced %s with [%s] in issue #%d", Constants.CVE_TBD_PREFIX, cveId, issue.getNumber());
+
+            var labelNames = issue.getLabels().stream()
+                    .map(GHLabel::getName)
+                    .toList();
+
+            if (labelNames.contains(Status.CVE_REQUEST.toLabel())) {
+                issue.removeLabels(Status.CVE_REQUEST.toLabel());
+                LOGGER.infof("Removed %s label from issue #%d", Status.CVE_REQUEST.toLabel(), issue.getNumber());
+            }
+
+            if (!labelNames.contains(Kind.CVE.toLabel())) {
+                issue.addLabels(Kind.CVE.toLabel());
+                LOGGER.infof("Added %s label to issue #%d", Kind.CVE.toLabel(), issue.getNumber());
+            }
+        }
+    }
+
+    static String extractCveId(String text) {
+        if (text == null) return null;
+        Matcher matcher = Constants.CVE_PATTERN.matcher(text);
+        return matcher.find() ? matcher.group() : null;
     }
 
     private boolean isValidGroupMessage(Map<String, String> headers) {

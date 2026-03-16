@@ -8,7 +8,8 @@ public enum Status {
     MISSING_INFORMATION,
     BUMPED_BY_BOT,
     TRIAGE,
-    REOPENED;
+    REOPENED,
+    CVE_REQUEST;
 
     @Override
     public String toString() {

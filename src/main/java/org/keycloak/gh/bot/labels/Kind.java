@@ -2,7 +2,8 @@ package org.keycloak.gh.bot.labels;
 
 public enum Kind {
 
-    BUG;
+    BUG,
+    CVE;
 
     @Override
     public String toString() {
