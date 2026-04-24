@@ -6,6 +6,9 @@ public final class Constants {
 
     public static final Pattern CVE_PATTERN = Pattern.compile("CVE-\\d{4}-\\d+");
 
+    public static final String GHI_ISSUE_PREFIX = "#GHI-";
+    public static final Pattern GHI_ISSUE_PATTERN = Pattern.compile("#GHI-(\\d{1,9})");
+
     public static final String GMAIL_THREAD_ID_PREFIX = "**Gmail-Thread-ID:**";
     public static final String SECALERT_THREAD_ID_PREFIX = "**SecAlert-Thread-ID:**";
     public static final String CVE_TBD_PREFIX = "[CVE-TBD]";

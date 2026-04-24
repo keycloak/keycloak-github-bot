@@ -14,6 +14,7 @@ import org.keycloak.gh.bot.labels.Status;
 import org.keycloak.gh.bot.security.common.Constants;
 import org.keycloak.gh.bot.utils.Labels;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueComment;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHLabel;
 import org.kohsuke.github.GHRepository;
@@ -23,9 +24,11 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @ApplicationScoped
 public class MailProcessor {
@@ -43,8 +46,8 @@ public class MailProcessor {
     @ConfigProperty(name = "repository.privateRepository")
     String repositoryName;
 
-    @ConfigProperty(name = "email.sender.secalert")
-    String secAlertEmail;
+    @ConfigProperty(name = "secalert.email.reply-to")
+    String secAlertReplyTo;
 
     @Inject
     GmailAdapter gmail;
@@ -59,6 +62,11 @@ public class MailProcessor {
 
     private final Cache<String, Integer> issueCache = Caffeine.newBuilder()
             .maximumSize(1000)
+            .expireAfterWrite(Duration.ofDays(7))
+            .build();
+
+    private final Cache<Integer, Boolean> secAlertThreadIdCache = Caffeine.newBuilder()
+            .maximumSize(500)
             .expireAfterWrite(Duration.ofDays(7))
             .build();
 
@@ -100,15 +108,19 @@ public class MailProcessor {
             var msg = gmail.getMessage(msgSummary.getId());
             var headers = gmail.getHeadersMap(msg);
             var from = headers.getOrDefault("From", "");
+            var replyTo = headers.getOrDefault("Reply-To", "");
 
-            if (isFromBot(from) || !isValidGroupMessage(headers)) {
+            boolean fromSecAlert = isFromSecAlert(from, replyTo);
+
+            if (isFromBot(from) || (!fromSecAlert && !isValidGroupMessage(headers))) {
                 gmail.markAsRead(msgSummary.getId());
                 return;
             }
 
             var threadId = msg.getThreadId();
             var messageId = headers.getOrDefault("Message-ID", "").replaceAll("^<|>$", "");
-            var subject = normalizeSubject(headers.getOrDefault("Subject", "(No Subject)").trim());
+            var rawSubject = headers.getOrDefault("Subject", "(No Subject)").trim();
+            var subject = normalizeSubject(rawSubject);
 
             var body = bodySanitizer.sanitize(gmail.getBody(msg)).orElse("(No content)");
             var attachments = gmail.getAttachments(msg);
@@ -117,8 +129,10 @@ public class MailProcessor {
 
             var issueOpt = resolveIssue(github, repository, threadId);
 
-            if (issueOpt.isEmpty() && isFromSecAlert(from)) {
-                issueOpt = resolveIssueBySecAlertThread(github, repository, threadId);
+            if (issueOpt.isEmpty() && fromSecAlert) {
+                issueOpt = resolveIssueByGhiTag(repository, rawSubject)
+                        .or(() -> resolveIssueBySecAlertThreadId(github, repository, threadId));
+                issueOpt.ifPresent(issue -> issueCache.put(threadId, issue.getNumber()));
             }
 
             if (issueOpt.isPresent()) {
@@ -129,8 +143,9 @@ public class MailProcessor {
                 }
                 appendComment(issue, from, body, attachmentSection);
 
-                if (isFromSecAlert(from)) {
+                if (fromSecAlert) {
                     applyCveIdFromSecAlert(issue, subject, body);
+                    recordSecAlertThreadIdIfMissing(issue, threadId);
                 }
             } else {
                 var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
@@ -218,23 +233,74 @@ public class MailProcessor {
         return from != null && from.toLowerCase().contains(botEmail.toLowerCase());
     }
 
-    private boolean isFromSecAlert(String from) {
-        return from != null && from.toLowerCase().contains(secAlertEmail.toLowerCase());
+    private boolean isFromSecAlert(String from, String replyTo) {
+        String needle = secAlertReplyTo.toLowerCase();
+        return Stream.of(from, replyTo)
+                .filter(Objects::nonNull)
+                .anyMatch(header -> header.toLowerCase().contains(needle));
     }
 
-    private Optional<GHIssue> resolveIssueBySecAlertThread(GitHub github, GHRepository repository, String threadId) {
+    private Optional<GHIssue> resolveIssueBySecAlertThreadId(GitHub github, GHRepository repository, String threadId) {
         try {
-            var query = "repo:%s \"%s %s\" is:issue in:comments".formatted(
-                    repositoryName, Constants.SECALERT_THREAD_ID_PREFIX, threadId);
+            var expectedMarker = Constants.SECALERT_THREAD_ID_PREFIX + " " + threadId;
+            var query = "repo:%s \"%s\" is:issue in:comments".formatted(repositoryName, expectedMarker);
             var iterator = github.searchIssues().q(query).list().iterator();
-            if (iterator.hasNext()) {
+            while (iterator.hasNext()) {
                 int issueNumber = iterator.next().getNumber();
-                return Optional.ofNullable(repository.getIssue(issueNumber));
+                var issue = repository.getIssue(issueNumber);
+                if (hasExactSecAlertThreadId(issue, expectedMarker)) {
+                    issueCache.put(threadId, issueNumber);
+                    return Optional.of(issue);
+                }
             }
         } catch (Exception e) {
-            LOGGER.warnf(e, "GitHub search failed for SecAlert thread %s", threadId);
+            LOGGER.warnf(e, "GitHub search by SecAlert-Thread-ID failed for thread %s", threadId);
         }
         return Optional.empty();
+    }
+
+    private boolean hasExactSecAlertThreadId(GHIssue issue, String expectedMarker) throws IOException {
+        for (GHIssueComment c : issue.queryComments().list()) {
+            String body = c.getBody();
+            if (body != null && body.contains(expectedMarker)) {
+                secAlertThreadIdCache.put(issue.getNumber(), Boolean.TRUE);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Optional<GHIssue> resolveIssueByGhiTag(GHRepository repository, String subject) {
+        if (subject == null) return Optional.empty();
+        Matcher matcher = Constants.GHI_ISSUE_PATTERN.matcher(subject);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        int issueNumber = Integer.parseInt(matcher.group(1));
+        try {
+            return Optional.ofNullable(repository.getIssue(issueNumber));
+        } catch (IOException e) {
+            LOGGER.warnf(e, "Failed to fetch issue #%d referenced by SecAlert subject tag", issueNumber);
+            return Optional.empty();
+        }
+    }
+
+    void recordSecAlertThreadIdIfMissing(GHIssue issue, String threadId) throws IOException {
+        if (threadId == null || threadId.isBlank()) return;
+        int issueNumber = issue.getNumber();
+        if (Boolean.TRUE.equals(secAlertThreadIdCache.getIfPresent(issueNumber))) {
+            return;
+        }
+        for (GHIssueComment c : issue.queryComments().list()) {
+            String body = c.getBody();
+            if (body != null && body.contains(Constants.SECALERT_THREAD_ID_PREFIX)) {
+                secAlertThreadIdCache.put(issueNumber, Boolean.TRUE);
+                return;
+            }
+        }
+        issue.comment(Constants.SECALERT_THREAD_ID_PREFIX + " " + threadId);
+        secAlertThreadIdCache.put(issueNumber, Boolean.TRUE);
+        LOGGER.infof("Recorded %s %s on issue #%d", Constants.SECALERT_THREAD_ID_PREFIX, threadId, issueNumber);
     }
 
     void applyCveIdFromSecAlert(GHIssue issue, String subject, String body) throws IOException {
