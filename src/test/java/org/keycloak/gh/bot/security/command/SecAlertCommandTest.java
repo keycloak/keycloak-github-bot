@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -40,7 +41,8 @@ class SecAlertCommandTest {
         command = new SecAlertCommand();
 
         setField(command, "mailSender", mailSender);
-        setField(command, "secAlertEmail", "secalert@redhat.com");
+        setField(command, "secAlertTo", "secalert@redhat.com");
+        setField(command, "secAlertReplyTo", "secalert@redhat.atlassian.net");
         setField(command, "targetGroup", "keycloak-security@googlegroups.com");
 
         payload = mock(GHEventPayload.IssueComment.class);
@@ -59,21 +61,21 @@ class SecAlertCommandTest {
     // --- New thread (no existing SecAlert-Thread-ID) ---
 
     @Test
-    void newThread_sendsEmailWithSubjectAndPostsThreadId() throws Exception {
+    void newThread_sendsEmailWithGhiTaggedSubject() throws Exception {
         when(comment.getBody()).thenReturn("@security secalert CVE-2026-1234 XSS in admin console\n\nPlease triage this vulnerability.");
         setupSubject("CVE-2026-1234", "XSS", "in", "admin", "console");
         setupIssueComments("Some unrelated comment");
         setupIssueLabels(Status.TRIAGE.toLabel());
         when(issue.getTitle()).thenReturn("Wildcard Redirect URI vulnerability");
         when(mailSender.sendNewEmail("secalert@redhat.com", "keycloak-security@googlegroups.com",
-                "CVE-2026-1234 XSS in admin console", "Please triage this vulnerability."))
+                "CVE-2026-1234 XSS in admin console - #GHI-42", "Please triage this vulnerability."))
                 .thenReturn(Optional.of("19c48d1ecb33de98"));
 
         command.run(payload);
 
         verify(mailSender).sendNewEmail("secalert@redhat.com", "keycloak-security@googlegroups.com",
-                "CVE-2026-1234 XSS in admin console", "Please triage this vulnerability.");
-        verify(issue).comment("SecAlert email sent. " + Constants.SECALERT_THREAD_ID_PREFIX + " 19c48d1ecb33de98");
+                "CVE-2026-1234 XSS in admin console - #GHI-42", "Please triage this vulnerability.");
+        verify(issue, never()).comment(anyString());
         verify(issue).removeLabels(Status.TRIAGE.toLabel());
         verify(issue).addLabels(Status.CVE_REQUEST.toLabel());
         verify(issue).setTitle("[CVE-TBD] Wildcard Redirect URI vulnerability");
@@ -120,6 +122,7 @@ class SecAlertCommandTest {
         setupSubject("Race", "Condition");
         setupIssueComments();
         setupIssueLabels(Status.TRIAGE.toLabel());
+        when(issue.getTitle()).thenReturn("Some title");
 
         CountDownLatch emailBlocked = new CountDownLatch(1);
         CountDownLatch secondCallDone = new CountDownLatch(1);
@@ -133,11 +136,13 @@ class SecAlertCommandTest {
         SecAlertCommand secondCommand = new SecAlertCommand();
         secondCommand.unparsedArgs = new ArrayList<>(List.of("Race", "Condition"));
         setField(secondCommand, "mailSender", mailSender);
-        setField(secondCommand, "secAlertEmail", "secalert@redhat.com");
+        setField(secondCommand, "secAlertTo", "secalert@redhat.com");
+        setField(secondCommand, "secAlertReplyTo", "secalert@redhat.atlassian.net");
         setField(secondCommand, "targetGroup", "keycloak-security@googlegroups.com");
 
+        var firstThreadError = new java.util.concurrent.atomic.AtomicReference<Throwable>();
         Thread firstThread = new Thread(() -> {
-            try { command.run(payload); } catch (IOException e) { throw new RuntimeException(e); }
+            try { command.run(payload); } catch (Exception e) { firstThreadError.set(e); }
         });
         firstThread.start();
 
@@ -146,6 +151,7 @@ class SecAlertCommandTest {
         secondCallDone.countDown();
         firstThread.join(5000);
 
+        assertNull(firstThreadError.get(), "First thread threw an exception");
         verify(mailSender, times(1)).sendNewEmail(anyString(), anyString(), anyString(), anyString());
     }
 
@@ -176,16 +182,16 @@ class SecAlertCommandTest {
     // --- Reply on existing thread (SecAlert-Thread-ID found) ---
 
     @Test
-    void existingThread_repliesWithoutSubject() throws Exception {
+    void existingThread_repliesToSecAlertReplyToAddress() throws Exception {
         when(comment.getBody()).thenReturn("@security secalert\n\nThis is a follow-up reply.");
-        setupIssueComments("SecAlert email sent. " + Constants.SECALERT_THREAD_ID_PREFIX + " abc123def456");
-        when(mailSender.sendThreadedEmail("abc123def456", "secalert@redhat.com",
+        setupIssueComments(Constants.SECALERT_THREAD_ID_PREFIX + " abc123def456");
+        when(mailSender.sendThreadedEmail("abc123def456", "secalert@redhat.atlassian.net",
                 "keycloak-security@googlegroups.com", "This is a follow-up reply."))
                 .thenReturn(true);
 
         command.run(payload);
 
-        verify(mailSender).sendThreadedEmail("abc123def456", "secalert@redhat.com",
+        verify(mailSender).sendThreadedEmail("abc123def456", "secalert@redhat.atlassian.net",
                 "keycloak-security@googlegroups.com", "This is a follow-up reply.");
         verify(mailSender, never()).sendNewEmail(anyString(), anyString(), anyString(), anyString());
         verify(issue, never()).removeLabels(any(String[].class));
@@ -196,7 +202,7 @@ class SecAlertCommandTest {
     @Test
     void existingThread_reactsWithThumbsDownWhenReplyFails() throws Exception {
         when(comment.getBody()).thenReturn("@security secalert\n\nFailed reply.");
-        setupIssueComments("SecAlert email sent. " + Constants.SECALERT_THREAD_ID_PREFIX + " abc123");
+        setupIssueComments(Constants.SECALERT_THREAD_ID_PREFIX + " abc123");
         when(mailSender.sendThreadedEmail(anyString(), anyString(), anyString(), anyString())).thenReturn(false);
 
         command.run(payload);

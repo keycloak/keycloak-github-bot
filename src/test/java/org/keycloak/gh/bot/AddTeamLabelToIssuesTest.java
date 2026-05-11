@@ -16,7 +16,7 @@ public class AddTeamLabelToIssuesTest {
 
     @Test
     public void testTeamAdded() throws IOException {
-        verifyLabelAdded("area/oidc", "team/core-clients");
+        verifyLabelAdded("area/oidc", "team/core-protocols");
         verifyLabelAdded("area/organizations", "team/core-iam");
     }
 

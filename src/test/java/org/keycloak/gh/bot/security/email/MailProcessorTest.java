@@ -5,13 +5,24 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.keycloak.gh.bot.labels.Kind;
 import org.keycloak.gh.bot.labels.Status;
+import org.keycloak.gh.bot.security.common.Constants;
 import org.kohsuke.github.GHIssue;
+import org.kohsuke.github.GHIssueComment;
+import org.kohsuke.github.GHIssueCommentQueryBuilder;
 import org.kohsuke.github.GHLabel;
+import org.kohsuke.github.GHRepository;
+import org.kohsuke.github.PagedIterable;
+import org.kohsuke.github.PagedIterator;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -167,5 +178,125 @@ public class MailProcessorTest {
 
         verify(issue).setTitle("[CVE-2026-8888] OIDC token leak");
         verify(issue, never()).addLabels(Kind.CVE.toLabel());
+    }
+
+    // --- resolveIssueByGhiTag ---
+
+    @Test
+    void resolveIssueByGhiTag_resolvesIssueFromSubjectTag() throws Exception {
+        GHRepository repository = mock(GHRepository.class);
+        GHIssue issue = mock(GHIssue.class);
+        when(repository.getIssue(42)).thenReturn(issue);
+
+        MailProcessor processor = new MailProcessor();
+        Optional<GHIssue> result = processor.resolveIssueByGhiTag(repository, "Re: CVE-2026-1234 XSS - #GHI-42");
+
+        assertTrue(result.isPresent());
+        assertEquals(issue, result.get());
+    }
+
+    @Test
+    void resolveIssueByGhiTag_returnsEmptyWhenNoTagPresent() {
+        GHRepository repository = mock(GHRepository.class);
+
+        MailProcessor processor = new MailProcessor();
+        Optional<GHIssue> result = processor.resolveIssueByGhiTag(repository, "Re: CVE-2026-1234 XSS in admin console");
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void resolveIssueByGhiTag_returnsEmptyForNullSubject() {
+        GHRepository repository = mock(GHRepository.class);
+
+        MailProcessor processor = new MailProcessor();
+        Optional<GHIssue> result = processor.resolveIssueByGhiTag(repository, null);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void resolveIssueByGhiTag_returnsEmptyWhenIssueFetchFails() throws Exception {
+        GHRepository repository = mock(GHRepository.class);
+        when(repository.getIssue(99)).thenThrow(new IOException("not found"));
+
+        MailProcessor processor = new MailProcessor();
+        Optional<GHIssue> result = processor.resolveIssueByGhiTag(repository, "Subject - #GHI-99");
+
+        assertTrue(result.isEmpty());
+    }
+
+    // --- recordSecAlertThreadIdIfMissing ---
+
+    @Test
+    void recordSecAlertThreadIdIfMissing_postsMarkerWhenAbsent() throws Exception {
+        GHIssue issue = mock(GHIssue.class);
+        when(issue.getNumber()).thenReturn(10);
+        stubIssueComments(issue, "Some unrelated comment");
+
+        MailProcessor processor = new MailProcessor();
+        processor.recordSecAlertThreadIdIfMissing(issue, "deadbeef123");
+
+        verify(issue).comment(Constants.SECALERT_THREAD_ID_PREFIX + " deadbeef123");
+    }
+
+    @Test
+    void recordSecAlertThreadIdIfMissing_skipsWhenMarkerAlreadyExists() throws Exception {
+        GHIssue issue = mock(GHIssue.class);
+        when(issue.getNumber()).thenReturn(10);
+        stubIssueComments(issue, Constants.SECALERT_THREAD_ID_PREFIX + " existingthread");
+
+        MailProcessor processor = new MailProcessor();
+        processor.recordSecAlertThreadIdIfMissing(issue, "newthread");
+
+        verify(issue, never()).comment(anyString());
+    }
+
+    @Test
+    void recordSecAlertThreadIdIfMissing_skipsOnBlankThreadId() throws Exception {
+        GHIssue issue = mock(GHIssue.class);
+
+        MailProcessor processor = new MailProcessor();
+        processor.recordSecAlertThreadIdIfMissing(issue, "");
+
+        verify(issue, never()).comment(anyString());
+        verify(issue, never()).queryComments();
+    }
+
+    @Test
+    void recordSecAlertThreadIdIfMissing_usesCache() throws Exception {
+        GHIssue issue = mock(GHIssue.class);
+        when(issue.getNumber()).thenReturn(10);
+        stubIssueComments(issue, Constants.SECALERT_THREAD_ID_PREFIX + " firstthread");
+
+        MailProcessor processor = new MailProcessor();
+        processor.recordSecAlertThreadIdIfMissing(issue, "secondthread");
+        processor.recordSecAlertThreadIdIfMissing(issue, "thirdthread");
+
+        verify(issue.queryComments(), org.mockito.Mockito.times(1)).list();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubIssueComments(GHIssue issue, String... commentBodies) throws IOException {
+        GHIssueCommentQueryBuilder queryBuilder = mock(GHIssueCommentQueryBuilder.class);
+        when(issue.queryComments()).thenReturn(queryBuilder);
+
+        List<GHIssueComment> comments = new ArrayList<>();
+        for (String body : commentBodies) {
+            GHIssueComment c = mock(GHIssueComment.class);
+            when(c.getBody()).thenReturn(body);
+            comments.add(c);
+        }
+
+        PagedIterable<GHIssueComment> pagedIterable = mock(PagedIterable.class);
+        when(queryBuilder.list()).thenReturn(pagedIterable);
+
+        when(pagedIterable.iterator()).thenAnswer(inv -> {
+            PagedIterator<GHIssueComment> pagedIterator = mock(PagedIterator.class);
+            final int[] index = {0};
+            when(pagedIterator.hasNext()).thenAnswer(i -> index[0] < comments.size());
+            when(pagedIterator.next()).thenAnswer(i -> comments.get(index[0]++));
+            return pagedIterator;
+        });
     }
 }
