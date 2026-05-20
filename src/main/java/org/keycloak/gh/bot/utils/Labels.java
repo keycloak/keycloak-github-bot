@@ -22,6 +22,8 @@ public class Labels {
 
     public static final String SOURCE_EMAIL = "source/email";
 
+    public static final String REOPENED_BY_BOT = "status/re-opened-by-bot";
+
     public static boolean hasLabel(GHIssue issue, String label) {
         return issue.getLabels().stream().filter(l -> l.getName().equals(label)).findFirst().isPresent();
     }

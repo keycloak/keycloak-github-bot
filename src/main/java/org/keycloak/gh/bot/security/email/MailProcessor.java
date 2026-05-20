@@ -139,6 +139,7 @@ public class MailProcessor {
                 var issue = issueOpt.get();
                 if (issue.getState() == GHIssueState.CLOSED) {
                     issue.reopen();
+                    issue.addLabels(Labels.STATUS_TRIAGE, Labels.REOPENED_BY_BOT);
                     LOGGER.infof("Reopened existing closed issue #%d for thread %s", issue.getNumber(), threadId);
                 }
                 appendComment(issue, from, body, attachmentSection);
