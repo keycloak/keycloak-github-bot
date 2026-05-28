@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 
 public class CommitUtils {
 
-    private static final Pattern LINKED_ISSUE_PATTERN = Pattern.compile("(([c|C]loses)|([f|F]ixes)|([r|R]esolves)) #([0-9]*)");
+    private static final Pattern LINKED_ISSUE_PATTERN = Pattern.compile("(([c|C]loses)|([f|F]ixes)|([r|R]esolves)):? #([0-9]*)");
 
     public static Integer getIssuerNumber(String commitMessage) {
         Matcher matcher = LINKED_ISSUE_PATTERN.matcher(commitMessage);

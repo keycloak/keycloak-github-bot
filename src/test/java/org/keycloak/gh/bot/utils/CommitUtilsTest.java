@@ -13,8 +13,12 @@ public class CommitUtilsTest {
         Assertions.assertEquals(1232456, CommitUtils.getIssuerNumber("This is some commit message\nfixes #1232456 and something else\nSomething else"));
         Assertions.assertEquals(1232456, CommitUtils.getIssuerNumber("Resolves #1232456 and something else\nSomething else"));
         Assertions.assertEquals(1232456, CommitUtils.getIssuerNumber("resolves #1232456 and something else\nSomething else"));
+        Assertions.assertEquals(1232456, CommitUtils.getIssuerNumber("something else\nSomething else\nCloses: #1232456"));
+        Assertions.assertEquals(1232456, CommitUtils.getIssuerNumber("something else\nSomething else\nfixes: #1232456"));
         Assertions.assertNull(CommitUtils.getIssuerNumber("Some message\nResolves 1232456"));
-        Assertions.assertNull(CommitUtils.getIssuerNumber("Some message\nResolves: #1232456"));
+        Assertions.assertNull(CommitUtils.getIssuerNumber("Some message\nResolves:: #1232456"));
+        Assertions.assertNull(CommitUtils.getIssuerNumber("Some message\nResolves:#1232456"));
+        Assertions.assertNull(CommitUtils.getIssuerNumber("Some message\nResolves? #1232456"));
     }
 
 }
