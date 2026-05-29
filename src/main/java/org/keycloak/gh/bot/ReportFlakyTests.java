@@ -91,11 +91,10 @@ public class ReportFlakyTests {
     public List<FlakyJob> findFlakyJobs(GHWorkflowRun workflowRun) throws IOException {
         List<FlakyJob> allFlakyJobs = new LinkedList<>();
 
-        PagedIterator<GHArtifact> iterator = workflowRun.listArtifacts().iterator();
-        while (iterator.hasNext()) {
-            GHArtifact ghArtifact = iterator.next();
-            if (ghArtifact.getName().startsWith("flaky-tests-")) {
-                FlakyJob flakyJob = ghArtifact.download(inputStream -> FlakyJobParser.parse(inputStream));
+        for (GHArtifact ghArtifact : workflowRun.listArtifacts()) {
+            if (ghArtifact.getName().startsWith("flaky-tests-")
+                    || ghArtifact.getName().endsWith("playwright-report-chromium")) {
+                FlakyJob flakyJob = ghArtifact.download(FlakyJobParser::parse);
                 flakyJob.setWorkflow(workflowRun.getName());
                 allFlakyJobs.add(flakyJob);
             }

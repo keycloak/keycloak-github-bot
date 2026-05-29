@@ -1,0 +1,8 @@
+## user-federation/kerberos.spec.ts#User Fed Kerberos tests › Edit Kerberos provider › Should edit existing Kerberos provider and cancel
+[Keycloak CI - null](null)
+
+```
+[[ATTACHMENT|../test-results/user-federation-kerberos-U-710d8-erberos-provider-and-cancel-chromium/error-context.md]]
+
+[[ATTACHMENT|../test-results/user-federation-kerberos-U-710d8-erberos-provider-and-cancel-chromium-retry1/trace.zip]]
+```

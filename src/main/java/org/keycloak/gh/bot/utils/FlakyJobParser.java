@@ -38,6 +38,9 @@ public class FlakyJobParser {
                     flakyJob.setJobUrl(properties.getProperty("job_url"));
                     flakyJob.setPr(properties.getProperty("pr"));
                     flakyJob.setPrUrl(properties.getProperty("pr_url"));
+                } else if (ze.getName().matches("results.xml")) {
+                    SAXParser saxParser = saxParserFactory.newSAXParser();
+                    saxParser.parse(CloseShieldInputStream.wrap(zipInputStream), flakyTestHandler);
                 }
             }
         } catch (Exception e) {
@@ -69,6 +72,9 @@ public class FlakyJobParser {
                 case "stackTrace":
                     currentStackTrace = new StringBuilder();
                     break;
+                case "system-out":
+                    currentStackTrace = new StringBuilder();
+                    break;
             }
         }
 
@@ -84,6 +90,10 @@ public class FlakyJobParser {
                 case "stackTrace":
                     FAILURE_MAX_LINES = 5;
                     currentFlakyTest.addFailure(StringUtils.trimLines(currentStackTrace.toString(), FAILURE_MAX_LINES, true));
+                    currentStackTrace = null;
+                    break;
+                case "system-out":
+                    currentFlakyTest.addFailure(currentStackTrace.toString());
                     currentStackTrace = null;
                     break;
             }
