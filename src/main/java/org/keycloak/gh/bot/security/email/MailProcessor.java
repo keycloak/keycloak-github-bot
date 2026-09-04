@@ -22,6 +22,8 @@ import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,6 +41,9 @@ public class MailProcessor {
     private static final Pattern PSIRT_CLOSURE_PATTERN = Pattern.compile(
             "Your request\\s+[A-Z]+-\\d+.*this request is now closed",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Comparator<String> CVE_COMPARATOR = Comparator
+            .comparingInt(MailProcessor::cveYear)
+            .thenComparingInt(MailProcessor::cveSequence);
 
     @ConfigProperty(name = "google.group.target")
     String targetGroupEmail;
@@ -322,10 +327,7 @@ public class MailProcessor {
     }
 
     void applyCveIdFromSecAlert(GHIssue issue, String subject, String body) throws IOException {
-        String cveId = extractCveId(subject);
-        if (cveId == null) {
-            cveId = extractCveId(body);
-        }
+        String cveId = selectLatestCveId(subject, body);
         if (cveId == null) return;
 
         String title = issue.getTitle();
@@ -350,10 +352,29 @@ public class MailProcessor {
         }
     }
 
-    static String extractCveId(String text) {
-        if (text == null) return null;
+    static List<String> extractAllCveIds(String text) {
+        if (text == null) return List.of();
+        List<String> cves = new ArrayList<>();
         Matcher matcher = Constants.CVE_PATTERN.matcher(text);
-        return matcher.find() ? matcher.group() : null;
+        while (matcher.find()) {
+            cves.add(matcher.group());
+        }
+        return List.copyOf(cves);
+    }
+
+    private static int cveYear(String cve) {
+        return Integer.parseInt(cve.substring(4, cve.lastIndexOf('-')));
+    }
+
+    private static int cveSequence(String cve) {
+        return Integer.parseInt(cve.substring(cve.lastIndexOf('-') + 1));
+    }
+
+    static String selectLatestCveId(String subject, String body) {
+        return Stream.concat(extractAllCveIds(subject).stream(), extractAllCveIds(body).stream())
+                .distinct()
+                .max(CVE_COMPARATOR)
+                .orElse(null);
     }
 
     private boolean isValidGroupMessage(Map<String, String> headers) {

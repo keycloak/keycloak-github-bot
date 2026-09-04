@@ -76,31 +76,6 @@ public class MailProcessorTest {
     }
 
     @Test
-    void extractCveId_findsIdInSubject() {
-        assertEquals("CVE-2026-1234", MailProcessor.extractCveId("Re: CVE-2026-1234 XSS in admin console"));
-    }
-
-    @Test
-    void extractCveId_findsIdInBody() {
-        assertEquals("CVE-2026-45678", MailProcessor.extractCveId("The assigned CVE ID is CVE-2026-45678. Please confirm."));
-    }
-
-    @Test
-    void extractCveId_returnsNullWhenNoCvePresent() {
-        assertNull(MailProcessor.extractCveId("No CVE here, just a regular message."));
-    }
-
-    @Test
-    void extractCveId_returnsNullForNullInput() {
-        assertNull(MailProcessor.extractCveId(null));
-    }
-
-    @Test
-    void extractCveId_returnsFirstCveWhenMultiplePresent() {
-        assertEquals("CVE-2026-1111", MailProcessor.extractCveId("CVE-2026-1111 and CVE-2026-2222"));
-    }
-
-    @Test
     void applyCveIdFromSecAlert_replacesTitleAndRemovesCveRequestLabel() throws Exception {
         GHIssue issue = mock(GHIssue.class);
         when(issue.getTitle()).thenReturn("[CVE-TBD] XSS in admin console");
@@ -179,6 +154,87 @@ public class MailProcessorTest {
 
         verify(issue).setTitle("[CVE-2026-8888] OIDC token leak");
         verify(issue, never()).addLabels(Kind.CVE.toLabel());
+    }
+
+    // --- extractAllCveIds ---
+
+    @Test
+    void extractAllCveIds_findsMultipleCves() {
+        List<String> result = MailProcessor.extractAllCveIds("CVE-2026-9083 and CVE-2026-19729");
+        assertEquals(List.of("CVE-2026-9083", "CVE-2026-19729"), result);
+    }
+
+    @Test
+    void extractAllCveIds_returnsEmptyForNull() {
+        assertTrue(MailProcessor.extractAllCveIds(null).isEmpty());
+    }
+
+    @Test
+    void extractAllCveIds_returnsEmptyWhenNoCve() {
+        assertTrue(MailProcessor.extractAllCveIds("No CVE here").isEmpty());
+    }
+
+    // --- selectLatestCveId ---
+
+    @Test
+    void selectLatestCveId_picksHighestFromSubjectAndBody() {
+        assertEquals("CVE-2026-19729",
+                MailProcessor.selectLatestCveId("Incomplete fix for CVE-2026-9083", "*Reference : CVE-2026-19729"));
+    }
+
+    @Test
+    void selectLatestCveId_picksHighestWhenMultipleInBody() {
+        assertEquals("CVE-2026-19729",
+                MailProcessor.selectLatestCveId(null, "Report about CVE-2026-9083. Assigned CVE-2026-19729."));
+    }
+
+    @Test
+    void selectLatestCveId_fallsBackToSubjectWhenBodyEmpty() {
+        assertEquals("CVE-2026-9083",
+                MailProcessor.selectLatestCveId("Fix for CVE-2026-9083", "No CVE in body"));
+    }
+
+    @Test
+    void selectLatestCveId_returnsNullWhenNoCveAnywhere() {
+        assertNull(MailProcessor.selectLatestCveId("No CVE", "Also no CVE"));
+    }
+
+    @Test
+    void selectLatestCveId_returnsNullWhenBothInputsNull() {
+        assertNull(MailProcessor.selectLatestCveId(null, null));
+    }
+
+    @Test
+    void selectLatestCveId_returnsSingleCveWhenSameInBoth() {
+        assertEquals("CVE-2026-9083",
+                MailProcessor.selectLatestCveId("CVE-2026-9083", "Reference: CVE-2026-9083"));
+    }
+
+    @Test
+    void selectLatestCveId_comparesAcrossYears() {
+        assertEquals("CVE-2026-1",
+                MailProcessor.selectLatestCveId("CVE-2025-999999", "CVE-2026-1"));
+    }
+
+    // --- applyCveIdFromSecAlert bug scenario ---
+
+    @Test
+    void applyCveIdFromSecAlert_picksNewCveOverOldInSubject() throws Exception {
+        GHIssue issue = mock(GHIssue.class);
+        when(issue.getTitle()).thenReturn("[CVE-TBD] Incomplete fix for CVE-2026-9083");
+        when(issue.getNumber()).thenReturn(992);
+
+        GHLabel cveRequestLabel = mock(GHLabel.class);
+        when(cveRequestLabel.getName()).thenReturn(Status.CVE_REQUEST.toLabel());
+        when(issue.getLabels()).thenReturn(List.of(cveRequestLabel));
+
+        MailProcessor processor = new MailProcessor();
+        processor.applyCveIdFromSecAlert(issue, "Incomplete fix for CVE-2026-9083 - #GHI-992",
+                "*Reference : CVE-2026-19729\n*Embargo status : Public");
+
+        verify(issue).setTitle("[CVE-2026-19729] Incomplete fix for CVE-2026-9083");
+        verify(issue).removeLabels(Status.CVE_REQUEST.toLabel());
+        verify(issue).addLabels(Kind.CVE.toLabel());
     }
 
     // --- resolveIssueByGhiTag ---
