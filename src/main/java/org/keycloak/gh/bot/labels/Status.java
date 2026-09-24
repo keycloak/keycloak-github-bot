@@ -9,7 +9,8 @@ public enum Status {
     BUMPED_BY_BOT,
     TRIAGE,
     REOPENED,
-    CVE_REQUEST;
+    CVE_REQUESTED,
+    CVE_ASSIGNED;
 
     @Override
     public String toString() {

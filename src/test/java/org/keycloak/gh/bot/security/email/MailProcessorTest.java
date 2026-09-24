@@ -82,14 +82,15 @@ public class MailProcessorTest {
         when(issue.getNumber()).thenReturn(42);
 
         GHLabel cveRequestLabel = mock(GHLabel.class);
-        when(cveRequestLabel.getName()).thenReturn(Status.CVE_REQUEST.toLabel());
+        when(cveRequestLabel.getName()).thenReturn(Status.CVE_REQUESTED.toLabel());
         when(issue.getLabels()).thenReturn(List.of(cveRequestLabel));
 
         MailProcessor processor = new MailProcessor();
         processor.applyCveIdFromSecAlert(issue, "Re: CVE-2026-9999 XSS in admin console", "body");
 
         verify(issue).setTitle("[CVE-2026-9999] XSS in admin console");
-        verify(issue).removeLabels(Status.CVE_REQUEST.toLabel());
+        verify(issue).removeLabels(Status.CVE_REQUESTED.toLabel());
+        verify(issue).addLabels(Status.CVE_ASSIGNED.toLabel());
         verify(issue).addLabels(Kind.CVE.toLabel());
     }
 
@@ -104,7 +105,8 @@ public class MailProcessorTest {
         processor.applyCveIdFromSecAlert(issue, "Re: CVE-2026-9999 XSS in admin console", "body");
 
         verify(issue).setTitle("[CVE-2026-9999] XSS in admin console");
-        verify(issue, never()).removeLabels(Status.CVE_REQUEST.toLabel());
+        verify(issue, never()).removeLabels(Status.CVE_REQUESTED.toLabel());
+        verify(issue).addLabels(Status.CVE_ASSIGNED.toLabel());
         verify(issue).addLabels(Kind.CVE.toLabel());
     }
 
@@ -128,14 +130,15 @@ public class MailProcessorTest {
         when(issue.getNumber()).thenReturn(10);
 
         GHLabel cveRequestLabel = mock(GHLabel.class);
-        when(cveRequestLabel.getName()).thenReturn(Status.CVE_REQUEST.toLabel());
+        when(cveRequestLabel.getName()).thenReturn(Status.CVE_REQUESTED.toLabel());
         when(issue.getLabels()).thenReturn(List.of(cveRequestLabel));
 
         MailProcessor processor = new MailProcessor();
         processor.applyCveIdFromSecAlert(issue, "No CVE in subject", "Assigned CVE-2026-5555 for this issue.");
 
         verify(issue).setTitle("[CVE-2026-5555] SSRF vulnerability");
-        verify(issue).removeLabels(Status.CVE_REQUEST.toLabel());
+        verify(issue).removeLabels(Status.CVE_REQUESTED.toLabel());
+        verify(issue).addLabels(Status.CVE_ASSIGNED.toLabel());
         verify(issue).addLabels(Kind.CVE.toLabel());
     }
 

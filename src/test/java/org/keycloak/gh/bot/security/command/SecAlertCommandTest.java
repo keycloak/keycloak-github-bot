@@ -77,7 +77,7 @@ class SecAlertCommandTest {
                 "CVE-2026-1234 XSS in admin console - #GHI-42", "Please triage this vulnerability.");
         verify(issue, never()).comment(anyString());
         verify(issue).removeLabels(Status.TRIAGE.toLabel());
-        verify(issue).addLabels(Status.CVE_REQUEST.toLabel());
+        verify(issue).addLabels(Status.CVE_REQUESTED.toLabel());
         verify(issue).setTitle("[CVE-TBD] Wildcard Redirect URI vulnerability");
         verify(comment).createReaction(ReactionContent.PLUS_ONE);
     }
@@ -111,7 +111,7 @@ class SecAlertCommandTest {
         command.run(payload);
 
         verify(issue, never()).removeLabels(any(String[].class));
-        verify(issue).addLabels(Status.CVE_REQUEST.toLabel());
+        verify(issue).addLabels(Status.CVE_REQUESTED.toLabel());
         verify(issue).setTitle("[CVE-TBD] Some issue title");
         verify(comment).createReaction(ReactionContent.PLUS_ONE);
     }
