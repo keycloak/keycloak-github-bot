@@ -9,15 +9,45 @@ import org.kohsuke.github.GHIssue;
 import java.io.IOException;
 
 /**
- * Adds 'area/...' label to bugs by using the area selected by the reporter in the area dropdown on the bug issue form.
+ * On issue open, detects issue template structure from the body and applies appropriate labels.
+ * For bugs: adds kind/bug, status/triage, and area label.
+ * For enhancement and feature: adds the kind label and status/triage.
+ * For tasks: adds kind/task.
  */
 public class AddAreaLabelToBugs {
 
     void onOpen(@Issue.Opened GHEventPayload.Issue issuePayload) throws IOException {
         GHIssue issue = issuePayload.getIssue();
+        String body = issue.getBody();
 
-        if (Labels.hasLabel(issue, Labels.KIND_BUG)) {
-            String areaLabel = IssueParser.getAreaFromBody(issuePayload.getIssue().getBody());
+        boolean isBug = Labels.hasLabel(issue, Labels.KIND_BUG);
+
+        if (!isBug && !Labels.hasAnyLabelWithPrefix(issue, "kind/")) {
+            // When an issue is created by a user's AI using the API, it will not have a type or labels set
+            // Derive the necessary information from the template used.
+            IssueParser.TemplateType template = IssueParser.detectTemplateType(body);
+            if (template != null) {
+                switch (template) {
+                    case BUG -> {
+                        Labels.addLabelIfExists(issue, Labels.KIND_BUG);
+                        Labels.addLabelIfExists(issue, Labels.STATUS_TRIAGE);
+                        isBug = true;
+                    }
+                    case ENHANCEMENT -> {
+                        Labels.addLabelIfExists(issue, Labels.KIND_ENHANCEMENT);
+                        Labels.addLabelIfExists(issue, Labels.STATUS_TRIAGE);
+                    }
+                    case FEATURE -> {
+                        Labels.addLabelIfExists(issue, Labels.KIND_FEATURE);
+                        Labels.addLabelIfExists(issue, Labels.STATUS_TRIAGE);
+                    }
+                    case TASK -> Labels.addLabelIfExists(issue, Labels.KIND_TASK);
+                }
+            }
+        }
+
+        if (isBug) {
+            String areaLabel = IssueParser.getAreaFromBody(body);
             if (areaLabel != null) {
                 Labels.addLabelIfExists(issue, areaLabel);
             }
