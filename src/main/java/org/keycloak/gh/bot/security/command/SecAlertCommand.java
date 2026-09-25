@@ -78,7 +78,7 @@ public class SecAlertCommand extends CommandParser implements BotCommand {
         if (currentLabels.contains(Status.TRIAGE.toLabel())) {
             issue.removeLabels(Status.TRIAGE.toLabel());
         }
-        issue.addLabels(Status.CVE_REQUEST.toLabel());
+        issue.addLabels(Status.CVE_REQUESTED.toLabel());
 
         String title = issue.getTitle();
         if (title != null && !title.startsWith(Constants.CVE_TBD_PREFIX)) {

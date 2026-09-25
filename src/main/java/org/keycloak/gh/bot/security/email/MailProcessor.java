@@ -340,10 +340,13 @@ public class MailProcessor {
                     .map(GHLabel::getName)
                     .toList();
 
-            if (labelNames.contains(Status.CVE_REQUEST.toLabel())) {
-                issue.removeLabels(Status.CVE_REQUEST.toLabel());
-                LOGGER.infof("Removed %s label from issue #%d", Status.CVE_REQUEST.toLabel(), issue.getNumber());
+            if (labelNames.contains(Status.CVE_REQUESTED.toLabel())) {
+                issue.removeLabels(Status.CVE_REQUESTED.toLabel());
+                LOGGER.infof("Removed %s label from issue #%d", Status.CVE_REQUESTED.toLabel(), issue.getNumber());
             }
+
+            issue.addLabels(Status.CVE_ASSIGNED.toLabel());
+            LOGGER.infof("Added %s label to issue #%d", Status.CVE_ASSIGNED.toLabel(), issue.getNumber());
 
             if (!labelNames.contains(Kind.CVE.toLabel())) {
                 issue.addLabels(Kind.CVE.toLabel());
