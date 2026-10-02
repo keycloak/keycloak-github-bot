@@ -63,8 +63,17 @@ public class MailProcessor {
     @Inject
     GitHubInstallationProvider gitHubInstallationProvider;
 
+    @ConfigProperty(name = "bot.email.auto-reply.enabled", defaultValue = "true")
+    boolean autoReplyEnabled;
+
     @Inject
-    EmailBodySanitizer bodySanitizer; // Extracted parsing logic dependency
+    MailSender mailSender;
+
+    @Inject
+    SecurityEmailMessages emailMessages;
+
+    @Inject
+    EmailBodySanitizer bodySanitizer;
 
     private TargetGroup targetGroup;
 
@@ -158,6 +167,10 @@ public class MailProcessor {
                 var newIssue = createNewIssue(repository, threadId, subject, from, body, attachmentSection);
                 issueCache.put(threadId, newIssue.getNumber());
                 LOGGER.infof("Creating new issue #%d for thread %s", newIssue.getNumber(), threadId);
+
+                if (!fromSecAlert) {
+                    sendAcknowledgmentReply(threadId);
+                }
             }
 
             gmail.markAsRead(msgSummary.getId());
@@ -219,6 +232,22 @@ public class MailProcessor {
         issue.addLabels(Labels.STATUS_TRIAGE, Labels.SOURCE_EMAIL);
         issue.comment(formatNewIssueComment(threadId, subject, from, body, attachmentSection));
         return issue;
+    }
+
+    void sendAcknowledgmentReply(String threadId) {
+        if (!autoReplyEnabled) {
+            return;
+        }
+        try {
+            boolean sent = mailSender.sendReply(threadId, emailMessages.getAcknowledgmentMessage(), targetGroup.email());
+            if (sent) {
+                LOGGER.infof("Acknowledgment reply sent for thread %s", threadId);
+            } else {
+                LOGGER.warnf("Acknowledgment reply could not be sent for thread %s", threadId);
+            }
+        } catch (Exception e) {
+            LOGGER.errorf(e, "Failed to send acknowledgment reply for thread %s", threadId);
+        }
     }
 
     static String formatNewIssueComment(String threadId, String subject, String from, String body, String attachmentSection) {
