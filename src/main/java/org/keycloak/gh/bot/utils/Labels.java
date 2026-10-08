@@ -14,6 +14,8 @@ public class Labels {
 
     public static final String KIND_BUG = "kind/bug";
 
+    public static final String KIND_ENHANCEMENT = "kind/enhancement";
+
     public static final String STATUS_TRIAGE = "status/triage";
 
     public static final String AREA_CI = "area/ci";
@@ -25,7 +27,11 @@ public class Labels {
     public static final String REOPENED_BY_BOT = "status/re-opened-by-bot";
 
     public static boolean hasLabel(GHIssue issue, String label) {
-        return issue.getLabels().stream().filter(l -> l.getName().equals(label)).findFirst().isPresent();
+        return issue.getLabels().stream().anyMatch(l -> l.getName().equals(label));
+    }
+
+    public static boolean hasAnyLabelWithPrefix(GHIssue issue, String prefix) {
+        return issue.getLabels().stream().anyMatch(l -> l.getName().startsWith(prefix));
     }
 
     public static void addLabelIfExists(GHIssue issue, String areaLabel) throws IOException {
@@ -47,9 +53,8 @@ public class Labels {
     }
 
     private static boolean hasLabel(GHRepository repository, String label) throws IOException {
-        PagedIterator<GHLabel> itr = repository.listLabels().withPageSize(100).iterator();
-        while (itr.hasNext()) {
-            if (itr.next().getName().equals(label)) {
+        for (GHLabel ghLabel : repository.listLabels().withPageSize(100)) {
+            if (ghLabel.getName().equals(label)) {
                 return true;
             }
         }
