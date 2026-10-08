@@ -19,11 +19,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import java.lang.reflect.Field;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -378,6 +382,67 @@ public class MailProcessorTest {
     @Test
     void isPsirtClosureNotification_returnsFalseForBlankBody() {
         assertFalse(MailProcessor.isPsirtClosureNotification(""));
+    }
+
+    // --- sendAcknowledgmentReply ---
+
+    @Test
+    void sendAcknowledgmentReply_callsSendReplyWithCorrectArguments() {
+        MailSender mailSender = mock(MailSender.class);
+        SecurityEmailMessages emailMessages = mock(SecurityEmailMessages.class);
+        when(emailMessages.getAcknowledgmentMessage()).thenReturn("ack body");
+        when(mailSender.sendReply(anyString(), anyString(), anyString())).thenReturn(true);
+
+        MailProcessor processor = new MailProcessor();
+        setField(processor, "mailSender", mailSender);
+        setField(processor, "emailMessages", emailMessages);
+        setField(processor, "autoReplyEnabled", true);
+        setField(processor, "targetGroupEmail", "keycloak-security@googlegroups.com");
+        processor.init();
+
+        processor.sendAcknowledgmentReply("thread-abc");
+
+        verify(mailSender).sendReply(eq("thread-abc"), eq("ack body"), eq("keycloak-security@googlegroups.com"));
+    }
+
+    @Test
+    void sendAcknowledgmentReply_doesNotSendWhenDisabled() {
+        MailSender mailSender = mock(MailSender.class);
+
+        MailProcessor processor = new MailProcessor();
+        setField(processor, "mailSender", mailSender);
+        setField(processor, "autoReplyEnabled", false);
+
+        processor.sendAcknowledgmentReply("thread-abc");
+
+        verify(mailSender, never()).sendReply(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void sendAcknowledgmentReply_doesNotPropagateException() {
+        MailSender mailSender = mock(MailSender.class);
+        SecurityEmailMessages emailMessages = mock(SecurityEmailMessages.class);
+        when(emailMessages.getAcknowledgmentMessage()).thenReturn("ack body");
+        when(mailSender.sendReply(anyString(), anyString(), anyString())).thenThrow(new RuntimeException("Gmail API down"));
+
+        MailProcessor processor = new MailProcessor();
+        setField(processor, "mailSender", mailSender);
+        setField(processor, "emailMessages", emailMessages);
+        setField(processor, "autoReplyEnabled", true);
+        setField(processor, "targetGroupEmail", "keycloak-security@googlegroups.com");
+        processor.init();
+
+        assertDoesNotThrow(() -> processor.sendAcknowledgmentReply("thread-abc"));
+    }
+
+    private static void setField(Object target, String fieldName, Object value) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to set field " + fieldName, e);
+        }
     }
 
     @SuppressWarnings("unchecked")
