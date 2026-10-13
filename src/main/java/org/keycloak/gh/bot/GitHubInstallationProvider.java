@@ -1,6 +1,7 @@
 package org.keycloak.gh.bot;
 
 import io.quarkiverse.githubapp.GitHubClientProvider;
+import io.smallrye.graphql.client.dynamic.api.DynamicGraphQLClient;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;
@@ -27,7 +28,7 @@ public class GitHubInstallationProvider {
     private String botLogin;
 
     @PostConstruct
-    public void init() throws java.io.IOException {
+    public void init() throws IOException {
         GitHub appClient = gitHubClientProvider.getApplicationClient();
         GHApp app = appClient.getApp();
         this.botLogin = app.getSlug() + "[bot]";
@@ -55,6 +56,14 @@ public class GitHubInstallationProvider {
      * Fetches the authenticated GitHub client for a specific repository
      */
     public GitHub getGitHubClient(String repositoryFullName) throws IOException {
+        return gitHubClientProvider.getInstallationClient(getInstallationId(repositoryFullName));
+    }
+
+    public DynamicGraphQLClient getGraphQLClient(String repositoryFullName) throws IOException {
+        return gitHubClientProvider.getInstallationGraphQLClient(getInstallationId(repositoryFullName));
+    }
+
+    private long getInstallationId(String repositoryFullName) throws IOException {
         int slashIndex = repositoryFullName.indexOf('/');
 
         if (slashIndex <= 0 || slashIndex == repositoryFullName.length() - 1) {
@@ -64,9 +73,7 @@ public class GitHubInstallationProvider {
         String owner = repositoryFullName.substring(0, slashIndex);
         String repoName = repositoryFullName.substring(slashIndex + 1);
 
-        long installId = gitHubClientProvider.getApplicationClient().getApp()
+        return gitHubClientProvider.getApplicationClient().getApp()
                 .getInstallationByRepository(owner, repoName).getId();
-
-        return gitHubClientProvider.getInstallationClient(installId);
     }
 }

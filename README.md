@@ -15,6 +15,19 @@ add the applicable `area/` when a new bug issue is created.
 
 When an issue is closed the `status/triage` label is removed from the issue.
 
+### Remind assignees about missing backport PRs
+
+Every hour, the bot checks issues closed as completed for at least 24 hours, with a related PR merged into `main`.
+It mentions assignees about missing backports and repeats reminders daily until satisfied, preserving history across restarts.
+
+Each `backport/<version>` label requires an open or merged PR targeting `release/<version>`, linked in Development.
+The bot links matching release PRs when opened, edited, or reopened, using closing keywords such as `Closes #123`.
+The hourly check only verifies Development links and sends reminders; linking is handled by PR webhooks.
+It ignores `backport/main` and versions with an `archive/release/<version>` branch. Removing a backport label removes its requirement.
+
+Configure the schedule with `backport.cron` and the reminder interval with `backport.reminderIntervalDays` (default: 1).
+Automatic linking requires GitHub App permission to link PRs to issues.
+
 ## Testing changes to the application
 
 To test changes to the application you need:
