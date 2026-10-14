@@ -10,7 +10,8 @@ public enum Status {
     TRIAGE,
     REOPENED,
     CVE_REQUESTED,
-    CVE_ASSIGNED;
+    CVE_ASSIGNED,
+    REJECTED;
 
     @Override
     public String toString() {

@@ -10,6 +10,8 @@ public final class Constants {
     public static final Pattern GHI_ISSUE_PATTERN = Pattern.compile("#GHI-(\\d{1,9})");
 
     public static final String GMAIL_THREAD_ID_PREFIX = "**Gmail-Thread-ID:**";
+    public static final Pattern GMAIL_THREAD_ID_PATTERN = Pattern.compile(
+            Pattern.quote(GMAIL_THREAD_ID_PREFIX) + "\\s*([a-f0-9]+)");
     public static final String SECALERT_THREAD_ID_PREFIX = "**SecAlert-Thread-ID:**";
     public static final String CVE_TBD_PREFIX = "[CVE-TBD]";
     public static final String ISSUE_DESCRIPTION_TEMPLATE = "_Thread originally started in the keycloak-security mailing list. Replace the content here with a proper CVE description._";

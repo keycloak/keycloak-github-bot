@@ -12,6 +12,7 @@ public class EnumTest {
         Assertions.assertEquals("status/missing-information", Status.MISSING_INFORMATION.toLabel());
         Assertions.assertEquals("status/bumped-by-bot", Status.BUMPED_BY_BOT.toLabel());
         Assertions.assertEquals("label:status/missing-information", "label:" + Status.MISSING_INFORMATION);
+        Assertions.assertEquals("status/rejected", Status.REJECTED.toLabel());
         Assertions.assertEquals("kind/bug", Kind.BUG.toLabel());
         Assertions.assertEquals("label:kind/bug", "label:" + Kind.BUG);
     }
@@ -21,6 +22,7 @@ public class EnumTest {
         Assertions.assertEquals(Priority.IMPORTANT, Priority.fromLabel("priority/important"));
         Assertions.assertEquals(Status.MISSING_INFORMATION, Status.fromLabel("status/missing-information"));
         Assertions.assertEquals(Status.BUMPED_BY_BOT, Status.fromLabel("status/bumped-by-bot"));
+        Assertions.assertEquals(Status.REJECTED, Status.fromLabel("status/rejected"));
         Assertions.assertEquals(Kind.BUG, Kind.fromLabel("kind/bug"));
     }
 
@@ -28,6 +30,7 @@ public class EnumTest {
     public void fromName() {
         Assertions.assertEquals(Priority.IMPORTANT, Priority.fromPriority("important"));
         Assertions.assertEquals(Status.MISSING_INFORMATION, Status.fromStatus("missing-information"));
+        Assertions.assertEquals(Status.REJECTED, Status.fromStatus("rejected"));
         Assertions.assertEquals(Kind.BUG, Kind.fromKind("bug"));
     }
 
@@ -44,6 +47,7 @@ public class EnumTest {
         Assertions.assertFalse(Priority.isInstance("something/important"));
         Assertions.assertFalse(Priority.isInstance("important"));
         Assertions.assertTrue(Status.isInstance("status/missing-information"));
+        Assertions.assertTrue(Status.isInstance("status/rejected"));
         Assertions.assertFalse(Status.isInstance("something"));
     }
 

@@ -10,7 +10,6 @@ import org.kohsuke.github.GHEventPayload;
 
 import java.io.IOException;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /**
  * Replies to the keycloak-security mailing list and the original sender when invoked via @security reply.
@@ -19,8 +18,6 @@ import java.util.regex.Pattern;
 public class MailingListCommand extends CommandParser implements BotCommand {
 
     private static final Logger LOGGER = Logger.getLogger(MailingListCommand.class);
-    private static final Pattern THREAD_ID_PATTERN = Pattern.compile(
-            Pattern.quote(Constants.GMAIL_THREAD_ID_PREFIX) + "\\s*([a-f0-9]+)");
 
     @Inject
     MailSender mailSender;
@@ -33,7 +30,7 @@ public class MailingListCommand extends CommandParser implements BotCommand {
         Optional<ParsedMessage> msg = extractMessage(payload);
         if (msg.isEmpty()) return;
 
-        Optional<String> threadId = findThreadId(payload, THREAD_ID_PATTERN);
+        Optional<String> threadId = findThreadId(payload, Constants.GMAIL_THREAD_ID_PATTERN);
         if (threadId.isEmpty()) {
             fail(payload, "Gmail Thread ID not found in issue comments. Cannot reply without a linked email thread.");
             return;
