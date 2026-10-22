@@ -4,6 +4,7 @@ import com.github.rvesse.airline.annotations.Cli;
 import io.quarkiverse.githubapp.command.airline.CliOptions;
 import io.quarkiverse.githubapp.command.airline.CommandOptions;
 import org.keycloak.gh.bot.security.command.MailingListCommand;
+import org.keycloak.gh.bot.security.command.RejectCommand;
 import org.keycloak.gh.bot.security.command.SecAlertCommand;
 import org.keycloak.gh.bot.security.command.UnknownCommand;
 
@@ -12,6 +13,7 @@ import org.keycloak.gh.bot.security.command.UnknownCommand;
         defaultCommand = UnknownCommand.class,
         commands = {
                 MailingListCommand.class,
+                RejectCommand.class,
                 SecAlertCommand.class,
                 UnknownCommand.class
         }
