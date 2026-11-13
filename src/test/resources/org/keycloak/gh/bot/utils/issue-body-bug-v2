@@ -1,0 +1,35 @@
+### Before reporting an issue
+
+- [X] I have read and understood the above terms for submitting issues, and I understand that my issue may be closed without action if I do not follow them.
+
+### Area
+
+token-exchange
+
+### Bug Description
+
+Blah blah blah
+
+### Version
+
+26.0.0
+
+### Regression
+
+- [ ] The issue is a regression
+
+### Expected behavior
+
+It works
+
+### Actual behavior
+
+It doesn't work
+
+### How to Reproduce?
+
+Do stuff
+
+### Anything else?
+
+_No response_

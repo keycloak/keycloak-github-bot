@@ -1,0 +1,25 @@
+### Description
+
+Add support for configuring custom token mappers via the admin REST API.
+
+### Value Proposition
+
+This would allow automation of token mapper configuration, reducing manual setup time.
+
+### Goals
+
+- REST API endpoint for CRUD operations on token mappers
+- Consistent behavior with admin console
+
+### Non-Goals
+
+- UI changes
+- Changes to existing mapper implementations
+
+### Discussion
+
+_No response_
+
+### Notes
+
+_No response_
