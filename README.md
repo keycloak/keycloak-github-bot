@@ -15,6 +15,14 @@ add the applicable `area/` when a new bug issue is created.
 
 When an issue is closed the `status/triage` label is removed from the issue.
 
+### Link backport PRs to issues
+
+When a PR targeting `release/*` is opened, edited, or reopened,
+the bot adds it to the Development section of issues referenced by closing keywords in its description, such as `Closes #123`.
+References can use `#123`, `owner/repo#123`, or `https://github.com/owner/repo/issues/123`,
+but must identify issues in the PR's repository.
+Linking works for open and closed issues without requiring backport labels.
+
 ## Testing changes to the application
 
 To test changes to the application you need:
