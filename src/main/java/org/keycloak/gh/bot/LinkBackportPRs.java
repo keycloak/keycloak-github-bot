@@ -45,22 +45,31 @@ public class LinkBackportPRs {
     private void link(GHEventPayload.PullRequest payload, DynamicGraphQLClient client) throws IOException {
         GHRepository repository = payload.getRepository();
         GHPullRequest pr = payload.getPullRequest();
-        String branch = pr.getBase().getRef();
-        if (pr.getState() != GHIssueState.OPEN || !branch.startsWith("release/")) {
-            return;
-        }
-        Set<Integer> issueNumbers = PullRequestParser.closingIssues(pr.getBody(), repository.getFullName());
-        for (int issueNumber : issueNumbers) {
-            GHIssue issue;
-            try {
-                issue = repository.getIssue(issueNumber);
-            } catch (GHFileNotFoundException e) {
-                logger.warnv("Referenced issue not found: repository={0}, issue={1}", repository.getFullName(), issueNumber);
-                continue;
+        try {
+            String branch = pr.getBase().getRef();
+            if (pr.getState() != GHIssueState.OPEN || !branch.startsWith("release/")) {
+                return;
             }
-            if (!issue.isPullRequest()) {
-                link(client, issue.getNodeId(), pr.getNodeId());
+            Set<Integer> issueNumbers = PullRequestParser.closingIssues(pr.getBody(), repository.getFullName());
+            for (int issueNumber : issueNumbers) {
+                GHIssue issue;
+                try {
+                    issue = repository.getIssue(issueNumber);
+                } catch (GHFileNotFoundException e) {
+                    logger.errorv(e, "Referenced issue not found while linking backport PR {0}#{1} to issue #{2}",
+                            repository.getFullName(), pr.getNumber(), issueNumber);
+                    continue;
+                }
+                if (!issue.isPullRequest()) {
+                    link(client, issue.getNodeId(), pr.getNodeId());
+                    logger.infov("Linked backport PR {0}#{1} to issue {0}#{2}",
+                            repository.getFullName(), pr.getNumber(), issueNumber);
+                }
             }
+        } catch (Exception e) {
+            logger.errorv(e, "Failed to link backport PR {0}#{1} to referenced issues",
+                    repository.getFullName(), pr.getNumber());
+            throw e;
         }
     }
 
