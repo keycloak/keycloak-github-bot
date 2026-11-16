@@ -8,11 +8,12 @@ import org.keycloak.gh.bot.utils.PullRequestParser;
 import org.kohsuke.github.GHEventPayload;
 import org.kohsuke.github.GHFileNotFoundException;
 import org.kohsuke.github.GHIssue;
-import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHPullRequestChanges;
 import org.kohsuke.github.GHRepository;
 
 import java.io.IOException;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +26,14 @@ public class LinkBackportPRs {
     private static final String LINK_PR = """
             mutation($issueId: ID!, $pullRequestIds: [ID!]!) {
                 addCloseIssueReferences(input: {issueId: $issueId, pullRequestIds: $pullRequestIds}) {
+                    issue { id }
+                }
+            }
+            """;
+
+    private static final String UNLINK_PR = """
+            mutation($issueId: ID!, $pullRequestIds: [ID!]!) {
+                removeCloseIssueReferences(input: {issueId: $issueId, pullRequestIds: $pullRequestIds}) {
                     issue { id }
                 }
             }
@@ -47,11 +56,18 @@ public class LinkBackportPRs {
         GHPullRequest pr = payload.getPullRequest();
         try {
             String branch = pr.getBase().getRef();
-            if (pr.getState() != GHIssueState.OPEN || !branch.startsWith("release/")) {
+            if (!branch.startsWith("release/")) {
                 return;
             }
             Set<Integer> issueNumbers = PullRequestParser.closingIssues(pr.getBody(), repository.getFullName());
-            for (int issueNumber : issueNumbers) {
+            Set<Integer> issuesToUpdate = new LinkedHashSet<>(issueNumbers);
+            // Include previous references so description edits can remove stale links.
+            GHPullRequestChanges changes = payload.getChanges();
+            if (changes != null && changes.getBody() != null) {
+                issuesToUpdate.addAll(PullRequestParser.closingIssues(changes.getBody().getFrom(), repository.getFullName()));
+            }
+            // Maintain links for both open and closed PRs.
+            for (int issueNumber : issuesToUpdate) {
                 GHIssue issue;
                 try {
                     issue = repository.getIssue(issueNumber);
@@ -61,9 +77,10 @@ public class LinkBackportPRs {
                     continue;
                 }
                 if (!issue.isPullRequest()) {
-                    link(client, issue.getNodeId(), pr.getNodeId());
-                    logger.infov("Linked backport PR {0}#{1} to issue {0}#{2}",
-                            repository.getFullName(), pr.getNumber(), issueNumber);
+                    boolean link = issueNumbers.contains(issueNumber);
+                    updateLink(client, link ? LINK_PR : UNLINK_PR, issue.getNodeId(), pr.getNodeId());
+                    logger.infov("Backport PR {0}#{1} {2} issue {0}#{3}",
+                            repository.getFullName(), pr.getNumber(), link ? "linked to" : "unlinked from", issueNumber);
                 }
             }
         } catch (Exception e) {
@@ -73,9 +90,9 @@ public class LinkBackportPRs {
         }
     }
 
-    private void link(DynamicGraphQLClient client, String issueId, String prId) throws IOException {
+    private void updateLink(DynamicGraphQLClient client, String mutation, String issueId, String prId) throws IOException {
         try {
-            Response response = client.executeSync(LINK_PR, Map.of("issueId", issueId, "pullRequestIds", List.of(prId)));
+            Response response = client.executeSync(mutation, Map.of("issueId", issueId, "pullRequestIds", List.of(prId)));
             if (response.hasError() || !response.hasData()) {
                 throw new IOException("Backport GraphQL request failed: " + response.getErrors());
             }

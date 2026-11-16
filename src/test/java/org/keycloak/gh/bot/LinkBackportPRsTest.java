@@ -12,6 +12,7 @@ import org.kohsuke.github.GHFileNotFoundException;
 import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHPullRequestChanges;
 import org.kohsuke.github.GHRepository;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class LinkBackportPRsTest {
@@ -65,10 +67,54 @@ class LinkBackportPRsTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"main,OPEN", "release/26.8,CLOSED"})
-    void skipsUnrelatedOrClosedPRs(String branch, GHIssueState state) throws Exception {
-        when(base.getRef()).thenReturn(branch);
-        when(pr.getState()).thenReturn(state);
+    @CsvSource({"'',removeCloseIssueReferences,removeCloseIssueReferences",
+            "Closes #456,removeCloseIssueReferences,addCloseIssueReferences",
+            "Fixes #123,addCloseIssueReferences,removeCloseIssueReferences"})
+    void unlinksRemovedReferencesAndKeepsRemainingLinks(String body, String firstMutation, String secondMutation) throws Exception {
+        GHPullRequestChanges changes = mock(GHPullRequestChanges.class);
+        GHPullRequestChanges.GHFrom previousBody = mock(GHPullRequestChanges.GHFrom.class);
+        when(payload.getChanges()).thenReturn(changes);
+        when(changes.getBody()).thenReturn(previousBody);
+        when(previousBody.getFrom()).thenReturn("Closes #123\nFixes #456");
+        when(pr.getBody()).thenReturn(body);
+        GHIssue otherIssue = mock(GHIssue.class);
+        when(repository.getIssue(456)).thenReturn(otherIssue);
+        when(otherIssue.getNodeId()).thenReturn("other");
+
+        handler.onEdit(payload, client);
+
+        verify(client).executeSync(contains(firstMutation),
+                eq(Map.of("issueId", "issue", "pullRequestIds", List.of("backport"))));
+        verify(client).executeSync(contains(secondMutation),
+                eq(Map.of("issueId", "other", "pullRequestIds", List.of("backport"))));
+        verifyNoMoreInteractions(client);
+    }
+
+    @Test
+    void linksAndUnlinksReferencesWhileClosed() throws Exception {
+        GHPullRequestChanges changes = mock(GHPullRequestChanges.class);
+        GHPullRequestChanges.GHFrom previousBody = mock(GHPullRequestChanges.GHFrom.class);
+        when(payload.getChanges()).thenReturn(changes);
+        when(changes.getBody()).thenReturn(previousBody);
+        when(previousBody.getFrom()).thenReturn("Closes #123");
+        when(pr.getBody()).thenReturn("Fixes #456");
+        when(pr.getState()).thenReturn(GHIssueState.CLOSED);
+        GHIssue otherIssue = mock(GHIssue.class);
+        when(repository.getIssue(456)).thenReturn(otherIssue);
+        when(otherIssue.getNodeId()).thenReturn("other");
+
+        handler.onEdit(payload, client);
+
+        verify(client).executeSync(contains("addCloseIssueReferences"),
+                eq(Map.of("issueId", "other", "pullRequestIds", List.of("backport"))));
+        verify(client).executeSync(contains("removeCloseIssueReferences"),
+                eq(Map.of("issueId", "issue", "pullRequestIds", List.of("backport"))));
+        verifyNoMoreInteractions(client);
+    }
+
+    @Test
+    void skipsUnrelatedPRs() throws Exception {
+        when(base.getRef()).thenReturn("main");
         handler.onOpen(payload, client);
         verifyNoInteractions(client);
     }
