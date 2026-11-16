@@ -31,6 +31,12 @@ public class ReleaseLabelsTest {
     }
 
     @Test
+    public void releaseBranchIgnoresTagsWithSuffix() {
+        ReleaseLabels.Result r = ReleaseLabels.forBaseBranch("release/26.6", List.of(), List.of("26.6.9", "26.6.9-redhat2", "26.6.99-redhat1", "26.6.9.1"));
+        Assertions.assertEquals("release/26.6.10", r.releaseLabel());
+    }
+
+    @Test
     public void otherBranch() {
         Assertions.assertNull(ReleaseLabels.forBaseBranch("feature/x", List.of("release/26.4"), List.of()));
     }
