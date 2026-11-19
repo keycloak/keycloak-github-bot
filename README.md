@@ -23,6 +23,11 @@ References can use `#123`, `owner/repo#123`, or `https://github.com/owner/repo/i
 but must identify issues in the PR's repository.
 Linking works for open and closed issues without requiring backport labels.
 
+### Add release label to issues when a PR is merged
+
+When a PR is merged into `main` or a `release/*` branch, the issues it closes (from the PR description or the merge commit message)
+get the next `release/` label and lose the `backport/` label of the target branch.
+
 ## Testing changes to the application
 
 To test changes to the application you need:

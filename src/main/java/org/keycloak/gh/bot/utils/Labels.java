@@ -46,7 +46,7 @@ public class Labels {
         }
     }
 
-    private static boolean hasLabel(GHRepository repository, String label) throws IOException {
+    public static boolean hasLabel(GHRepository repository, String label) throws IOException {
         PagedIterator<GHLabel> itr = repository.listLabels().withPageSize(100).iterator();
         while (itr.hasNext()) {
             if (itr.next().getName().equals(label)) {
