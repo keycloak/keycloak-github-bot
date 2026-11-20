@@ -27,6 +27,7 @@ Linking works for open and closed issues without requiring backport labels.
 
 When a PR is merged into `main` or a `release/*` branch, the issues it closes (from the PR description or the merge commit message)
 get the next `release/` label and lose the `backport/` label of the target branch.
+The branches and tags of the repository configured as `repository.mainRepository` always determine the next version, also for PRs merged in other repositories where the bot is installed.
 
 ## Testing changes to the application
 

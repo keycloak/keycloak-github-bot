@@ -1,6 +1,7 @@
 package org.keycloak.gh.bot;
 
 import io.quarkiverse.githubapp.event.PullRequest;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.keycloak.gh.bot.utils.Labels;
 import org.keycloak.gh.bot.utils.ReleaseLabels;
@@ -10,6 +11,7 @@ import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHPullRequest;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GHTag;
+import org.kohsuke.github.GitHub;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,7 +25,10 @@ public class AddReleaseLabelOnMerge {
 
     private static final Logger logger = Logger.getLogger(AddReleaseLabelOnMerge.class);
 
-    void onClose(@PullRequest.Closed GHEventPayload.PullRequest payload) throws IOException {
+    @ConfigProperty(name = "repository.mainRepository")
+    String mainRepository;
+
+    void onClose(@PullRequest.Closed GHEventPayload.PullRequest payload, GitHub gitHub) throws IOException {
         GHPullRequest pullRequest = payload.getPullRequest();
         if (!pullRequest.isMerged()) {
             return;
@@ -32,9 +37,16 @@ public class AddReleaseLabelOnMerge {
         GHRepository repository = payload.getRepository();
         String base = pullRequest.getBase().getRef();
 
-        // Only fetch what is needed for the target branch
-        List<String> branches = base.equals("main") ? repository.getBranches().keySet().stream().toList() : List.of();
-        List<String> tags = base.startsWith("release/") ? repository.listTags().toList().stream().map(GHTag::getName).toList() : List.of();
+        // The branches and tags of the main repository are the source of truth for the next release, also for PRs in other repositories.
+        // The main repository is public, so it can be read with the installation of the PR's repository.
+        // Only fetch what is needed for the target branch.
+        List<String> branches = List.of();
+        List<String> tags = List.of();
+        if (base.equals("main")) {
+            branches = gitHub.getRepository(mainRepository).getBranches().keySet().stream().toList();
+        } else if (base.startsWith("release/")) {
+            tags = gitHub.getRepository(mainRepository).listTags().toList().stream().map(GHTag::getName).toList();
+        }
 
         ReleaseLabels.Result labels = ReleaseLabels.forBaseBranch(base, branches, tags);
         if (labels == null) {
