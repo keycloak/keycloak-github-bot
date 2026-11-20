@@ -11,6 +11,7 @@ import org.kohsuke.github.GHIssue;
 import org.kohsuke.github.GHLabel;
 import org.kohsuke.github.GHPullRequest;
 import org.kohsuke.github.GHRepository;
+import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GHTag;
 import org.kohsuke.github.PagedIterable;
 import org.kohsuke.github.PagedIterator;
@@ -35,12 +36,16 @@ class AddReleaseLabelOnMergeTest {
     private final AddReleaseLabelOnMerge handler = new AddReleaseLabelOnMerge();
     private final GHEventPayload.PullRequest payload = mock(GHEventPayload.PullRequest.class);
     private final GHRepository repository = mock(GHRepository.class);
+    private final GitHub gitHub = mock(GitHub.class);
+    private final GHRepository mainRepo = mock(GHRepository.class);
     private final GHPullRequest pr = mock(GHPullRequest.class);
     private final GHCommitPointer base = mock(GHCommitPointer.class);
     private final GHIssue issue = mock(GHIssue.class);
 
     @BeforeEach
     void setUp() throws Exception {
+        handler.mainRepository = "keycloak/keycloak";
+        when(gitHub.getRepository("keycloak/keycloak")).thenReturn(mainRepo);
         when(payload.getRepository()).thenReturn(repository);
         when(repository.getFullName()).thenReturn("keycloak/keycloak");
         when(payload.getPullRequest()).thenReturn(pr);
@@ -49,7 +54,7 @@ class AddReleaseLabelOnMergeTest {
         when(pr.getBody()).thenReturn("Closes #123");
         when(pr.getBase()).thenReturn(base);
         when(base.getRef()).thenReturn("main");
-        when(repository.getBranches()).thenReturn(Map.of(
+        when(mainRepo.getBranches()).thenReturn(Map.of(
                 "main", mock(GHBranch.class), "release/26.7", mock(GHBranch.class), "release/26.8", mock(GHBranch.class)));
         when(repository.getIssue(123)).thenReturn(issue);
         issueLabels("backport/main");
@@ -58,12 +63,12 @@ class AddReleaseLabelOnMergeTest {
 
     @Test
     void mainCreatesLabelAndMovesIssue() throws Exception {
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(repository).createLabel("release/27.0.0", "0E8A16");
         verify(issue).addLabels("release/27.0.0");
         verify(issue).removeLabel("backport/main");
-        verify(repository, never()).listTags();
+        verify(mainRepo, never()).listTags();
     }
 
     @Test
@@ -72,20 +77,20 @@ class AddReleaseLabelOnMergeTest {
         repositoryTags("26.8.0", "26.8.2", "26.7.5", "nightly");
         issueLabels("backport/26.8", "backport/main");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(repository).createLabel("release/26.8.3", "0E8A16");
         verify(issue).addLabels("release/26.8.3");
         verify(issue).removeLabel("backport/26.8");
         verify(issue, never()).removeLabel("backport/main");
-        verify(repository, never()).getBranches();
+        verify(mainRepo, never()).getBranches();
     }
 
     @Test
     void existingLabelIsNotCreatedAgain() throws Exception {
         repositoryLabels("release/27.0.0");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(repository, never()).createLabel(anyString(), anyString());
         verify(issue).addLabels("release/27.0.0");
@@ -98,7 +103,7 @@ class AddReleaseLabelOnMergeTest {
             throw new IOException("already exists");
         });
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(issue).addLabels("release/27.0.0");
     }
@@ -107,7 +112,7 @@ class AddReleaseLabelOnMergeTest {
     void labelCreationFailureIsPropagated() throws Exception {
         when(repository.createLabel("release/27.0.0", "0E8A16")).thenThrow(new IOException("forbidden"));
 
-        assertThrows(IOException.class, () -> handler.onClose(payload));
+        assertThrows(IOException.class, () -> handler.onClose(payload, gitHub));
 
         verify(issue, never()).addLabels(anyString());
     }
@@ -116,7 +121,7 @@ class AddReleaseLabelOnMergeTest {
     void issueWithoutBackportLabelOnlyGetsReleaseLabel() throws Exception {
         issueLabels();
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(issue).addLabels("release/27.0.0");
         verify(issue, never()).removeLabel(anyString());
@@ -130,7 +135,7 @@ class AddReleaseLabelOnMergeTest {
         when(repository.getIssue(456)).thenReturn(otherPr);
         when(pr.getBody()).thenReturn("Closes #999\nCloses #456\nFixes #123");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(issue).addLabels("release/27.0.0");
         verify(otherPr, never()).addLabels(anyString());
@@ -147,7 +152,7 @@ class AddReleaseLabelOnMergeTest {
         when(commit.getCommitShortInfo()).thenReturn(info);
         when(info.getMessage()).thenReturn("Some change\n\nCloses #123");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(issue).addLabels("release/27.0.0");
     }
@@ -157,17 +162,31 @@ class AddReleaseLabelOnMergeTest {
         when(pr.getBody()).thenReturn("Closes #123");
         when(pr.getMergeCommitSha()).thenReturn("abc");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(issue).addLabels("release/27.0.0");
         verify(repository, never()).getCommit(anyString());
     }
 
     @Test
+    void otherRepositoriesUseTagsOfMainRepository() throws Exception {
+        when(repository.getFullName()).thenReturn("keycloak/other-repository");
+        when(base.getRef()).thenReturn("release/26.8");
+        repositoryTags("26.8.0", "26.8.2");
+        issueLabels("backport/26.8");
+
+        handler.onClose(payload, gitHub);
+
+        verify(repository).createLabel("release/26.8.3", "0E8A16");
+        verify(issue).addLabels("release/26.8.3");
+        verify(repository, never()).listTags();
+    }
+
+    @Test
     void unmergedPRsAreIgnored() throws Exception {
         when(pr.isMerged()).thenReturn(false);
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verifyNoInteractions(repository);
     }
@@ -176,10 +195,10 @@ class AddReleaseLabelOnMergeTest {
     void unrelatedBranchesAreIgnored() throws Exception {
         when(base.getRef()).thenReturn("feature/x");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
-        verify(repository, never()).getBranches();
-        verify(repository, never()).listTags();
+        verify(mainRepo, never()).getBranches();
+        verify(mainRepo, never()).listTags();
         verify(repository, never()).getIssue(123);
     }
 
@@ -187,7 +206,7 @@ class AddReleaseLabelOnMergeTest {
     void noLinkedIssuesDoesNothing() throws Exception {
         when(pr.getBody()).thenReturn("Just a change");
 
-        handler.onClose(payload);
+        handler.onClose(payload, gitHub);
 
         verify(repository, never()).createLabel(anyString(), anyString());
         verify(repository, never()).getIssue(123);
@@ -228,7 +247,7 @@ class AddReleaseLabelOnMergeTest {
         }).toList();
         PagedIterable<GHTag> iterable = mock(PagedIterable.class);
         when(iterable.toList()).thenReturn(tags);
-        when(repository.listTags()).thenReturn(iterable);
+        when(mainRepo.listTags()).thenReturn(iterable);
     }
 
 }
